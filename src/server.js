@@ -5,6 +5,7 @@ import express from 'express';
 import { config } from './config.js';
 import { router as whatsappRouter } from './channels/whatsapp.js';
 import { router as telegramRouter } from './channels/telegram.js';
+import { aiHealthCheck } from './ai.js';
 
 const app = express();
 app.use(express.json());
@@ -17,14 +18,11 @@ app.get('/', (_req, res) => res.send('Omnichannel e-commerce agent is running âœ
 app.get('/debug', async (_req, res) => {
   const out = {
     server: 'ok',
-    ai: {
-      provider: config.aiProvider,
-      enabled: config.aiEnabled,
-      model: config.aiProvider === 'anthropic' ? config.aiModel : config.geminiModel
-    },
+    ai: { provider: config.aiProvider, enabled: config.aiEnabled },
     telegram: { enabled: config.telegram.enabled, hasSecret: Boolean(config.telegram.webhookSecret) },
     whatsapp: { enabled: config.whatsapp.enabled }
   };
+  try { out.ai = await aiHealthCheck(); } catch (e) { out.ai.error = String(e); }
 
   if (config.telegram.enabled) {
     try {

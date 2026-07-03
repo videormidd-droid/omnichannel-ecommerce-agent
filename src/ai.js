@@ -161,3 +161,40 @@ export async function generateReply(userText, ctx) {
     ? generateWithAnthropic(userText, ctx)
     : generateWithGemini(userText, ctx);
 }
+
+// Live AI health check for /debug — runs a tiny request and reports the exact
+// error (and, for Gemini, the model names your key can actually use).
+export async function aiHealthCheck() {
+  const info = {
+    provider: config.aiProvider,
+    enabled: config.aiEnabled,
+    model: config.aiProvider === 'anthropic' ? config.aiModel : config.geminiModel
+  };
+  if (!config.aiEnabled) return info;
+  try {
+    if (config.aiProvider === 'gemini') {
+      const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+      const m = genAI.getGenerativeModel({ model: config.geminiModel });
+      const r = await m.generateContent('say hi in one word');
+      info.test = { ok: true, sample: (r.response.text() || '').trim().slice(0, 40) };
+    } else {
+      await getAnthropic().messages.create({
+        model: config.aiModel, max_tokens: 20, messages: [{ role: 'user', content: 'say hi' }]
+      });
+      info.test = { ok: true };
+    }
+  } catch (e) {
+    info.test = { ok: false, error: String(e?.message || e).slice(0, 400) };
+  }
+  // For Gemini, list usable model names so we can pick a valid one.
+  if (config.aiProvider === 'gemini') {
+    try {
+      const list = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${config.geminiApiKey}`).then((x) => x.json());
+      info.availableModels = (list.models || [])
+        .map((mm) => (mm.name || '').replace('models/', ''))
+        .filter((n) => n.includes('gemini') && (n.includes('flash') || n.includes('pro')))
+        .slice(0, 20);
+    } catch { /* ignore */ }
+  }
+  return info;
+}
