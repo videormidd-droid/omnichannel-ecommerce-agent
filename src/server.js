@@ -44,6 +44,26 @@ app.get('/debug', async (_req, res) => {
     }
   }
 
+  // Validate the WhatsApp token against Meta (only when credentials are set).
+  if (config.whatsapp.enabled) {
+    try {
+      const r = await fetch(
+        `https://graph.facebook.com/${config.whatsapp.apiVersion}/${config.whatsapp.phoneNumberId}?fields=display_phone_number,verified_name`,
+        { headers: { Authorization: `Bearer ${config.whatsapp.accessToken}` } }
+      ).then((x) => x.json());
+      if (r.error) {
+        out.whatsapp.tokenValid = false;
+        out.whatsapp.error = `${r.error.code}: ${r.error.message}`.slice(0, 160);
+      } else {
+        out.whatsapp.tokenValid = true;
+        out.whatsapp.phone = r.display_phone_number;
+        out.whatsapp.verifiedName = r.verified_name;
+      }
+    } catch (e) {
+      out.whatsapp.checkError = String(e).slice(0, 160);
+    }
+  }
+
   res.json(out);
 });
 
