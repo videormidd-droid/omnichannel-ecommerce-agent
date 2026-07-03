@@ -47,6 +47,26 @@ app.get('/debug', async (_req, res) => {
   res.json(out);
 });
 
+// One-tap Telegram webhook registration using the server's OWN token + secret.
+// Open /setup-telegram once — no token typing, and the secret always matches.
+app.get('/setup-telegram', async (req, res) => {
+  if (!config.telegram.enabled) return res.json({ ok: false, error: 'Telegram not enabled' });
+  const base = (process.env.PUBLIC_BASE_URL || `https://${req.get('host')}`).replace(/\/$/, '');
+  const url = `${base}/webhook/telegram`;
+  const body = { url, allowed_updates: ['message'] };
+  if (config.telegram.webhookSecret) body.secret_token = config.telegram.webhookSecret;
+  try {
+    const result = await fetch(`https://api.telegram.org/bot${config.telegram.botToken}/setWebhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then((r) => r.json());
+    res.json({ registeredUrl: url, telegramResponse: result });
+  } catch (e) {
+    res.json({ ok: false, error: String(e) });
+  }
+});
+
 // Mount each channel only if its credentials are present
 if (config.whatsapp.enabled) {
   app.use('/webhook/whatsapp', whatsappRouter);
