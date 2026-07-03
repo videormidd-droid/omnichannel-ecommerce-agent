@@ -81,28 +81,36 @@ const systemPrompt = (storeName) => `তুমি "${storeName}"-এর ২৪/�
 - নিজে থেকে ছাড়/অফার বানাবে না।`;
 
 // ================= Provider: Google Gemini (default) =================
-let geminiModel;
-function getGeminiModel() {
-  if (!geminiModel) {
-    const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-    geminiModel = genAI.getGenerativeModel({
-      model: config.geminiModel, // e.g. gemini-2.0-flash (use a current model from AI Studio)
-      systemInstruction: systemPrompt(config.storeName),
-      // Gemini rejects empty `parameters` — omit it for parameterless tools.
-      tools: [{ functionDeclarations: toolDefs.map((t) =>
-        (t.parameters && Object.keys(t.parameters.properties || {}).length > 0)
-          ? { name: t.name, description: t.description, parameters: t.parameters }
-          : { name: t.name, description: t.description }
-      ) }]
-    });
-  }
-  return geminiModel;
+// Gemini rejects empty `parameters` — omit it for parameterless tools.
+const geminiFunctionDeclarations = toolDefs.map((t) =>
+  (t.parameters && Object.keys(t.parameters.properties || {}).length > 0)
+    ? { name: t.name, description: t.description, parameters: t.parameters }
+    : { name: t.name, description: t.description }
+);
+
+// Try the configured model first, then lite fallbacks. Lite models usually have
+// separate / higher free-tier quota, so a 429 on one model won't kill the reply.
+function geminiCandidates() {
+  return [...new Set([
+    config.geminiModel,
+    'gemini-2.0-flash-lite',
+    'gemini-2.5-flash-lite',
+    'gemini-flash-latest'
+  ])];
 }
 
-async function generateWithGemini(userText, ctx) {
-  const chat = getGeminiModel().startChat();
-  let result = await chat.sendMessage(userText);
+function makeGeminiModel(modelName) {
+  const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+  return genAI.getGenerativeModel({
+    model: modelName,
+    systemInstruction: systemPrompt(config.storeName),
+    tools: [{ functionDeclarations: geminiFunctionDeclarations }]
+  });
+}
 
+async function runGeminiChat(modelName, userText, ctx) {
+  const chat = makeGeminiModel(modelName).startChat();
+  let result = await chat.sendMessage(userText);
   for (let step = 0; step < 6; step++) {
     const calls = result.response.functionCalls() || [];
     if (calls.length === 0) {
@@ -118,6 +126,19 @@ async function generateWithGemini(userText, ctx) {
     result = await chat.sendMessage(parts); // send tool results back
   }
   return 'আমাদের একজন এজেন্ট শীঘ্রই আপনার সাথে যোগাযোগ করবেন। ধন্যবাদ!';
+}
+
+async function generateWithGemini(userText, ctx) {
+  let lastErr;
+  for (const model of geminiCandidates()) {
+    try {
+      return await runGeminiChat(model, userText, ctx);
+    } catch (err) {
+      lastErr = err;
+      console.error(`[gemini] model "${model}" failed: ${err?.message || err}`);
+    }
+  }
+  throw lastErr || new Error('All Gemini models failed');
 }
 
 // ================= Provider: Anthropic Claude =================
@@ -173,10 +194,20 @@ export async function aiHealthCheck() {
   if (!config.aiEnabled) return info;
   try {
     if (config.aiProvider === 'gemini') {
-      const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-      const m = genAI.getGenerativeModel({ model: config.geminiModel });
-      const r = await m.generateContent('say hi in one word');
-      info.test = { ok: true, sample: (r.response.text() || '').trim().slice(0, 40) };
+      const errors = {};
+      let ok = false;
+      for (const model of geminiCandidates()) {
+        try {
+          const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+          const r = await genAI.getGenerativeModel({ model }).generateContent('say hi in one word');
+          info.test = { ok: true, workingModel: model, sample: (r.response.text() || '').trim().slice(0, 40) };
+          ok = true;
+          break;
+        } catch (e) {
+          errors[model] = String(e?.message || e).slice(0, 100);
+        }
+      }
+      if (!ok) info.test = { ok: false, errors };
     } else {
       await getAnthropic().messages.create({
         model: config.aiModel, max_tokens: 20, messages: [{ role: 'user', content: 'say hi' }]
