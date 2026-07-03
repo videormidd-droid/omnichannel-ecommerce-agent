@@ -88,7 +88,12 @@ function getGeminiModel() {
     geminiModel = genAI.getGenerativeModel({
       model: config.geminiModel, // e.g. gemini-2.0-flash (use a current model from AI Studio)
       systemInstruction: systemPrompt(config.storeName),
-      tools: [{ functionDeclarations: toolDefs }]
+      // Gemini rejects empty `parameters` — omit it for parameterless tools.
+      tools: [{ functionDeclarations: toolDefs.map((t) =>
+        (t.parameters && Object.keys(t.parameters.properties || {}).length > 0)
+          ? { name: t.name, description: t.description, parameters: t.parameters }
+          : { name: t.name, description: t.description }
+      ) }]
     });
   }
   return geminiModel;

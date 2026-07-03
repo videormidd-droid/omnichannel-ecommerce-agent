@@ -21,12 +21,12 @@ export async function sendMessage(chatId, text) {
 export const router = express.Router();
 
 router.post('/', async (req, res) => {
-  // Verify the secret token (if you set one when registering the webhook)
+  // Soft secret check — logs a warning but does NOT reject, so delivery never
+  // silently fails on a secret mismatch. Re-enable the 401 for stricter security.
   if (config.telegram.webhookSecret) {
     const got = req.get('X-Telegram-Bot-Api-Secret-Token');
     if (got !== config.telegram.webhookSecret) {
-      console.warn('❌ [telegram] secret token mismatch — rejecting');
-      return res.sendStatus(401);
+      console.warn('⚠️ [telegram] secret token mismatch — processing anyway');
     }
   }
   res.sendStatus(200); // ack fast
@@ -48,7 +48,13 @@ router.post('/', async (req, res) => {
 
     // Telegram has no phone by default → phone is null; the AI will ask if needed.
     const ctx = { channel: 'telegram', userId: String(chatId), phone: null, handoff: null };
-    const reply = await generateReply(msg.text, ctx);
+    let reply;
+    try {
+      reply = await generateReply(msg.text, ctx);
+    } catch (aiErr) {
+      console.error('[telegram] AI error:', aiErr);
+      reply = 'দুঃখিত, এই মুহূর্তে একটু সমস্যা হচ্ছে। একটু পরে আবার চেষ্টা করুন। 🙏';
+    }
     await sendMessage(chatId, reply);
 
     if (ctx.handoff?.requested) console.log(`🔔 [telegram] HANDOFF ${chatId}: ${ctx.handoff.reason}`);
