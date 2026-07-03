@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { router as whatsappRouter } from './channels/whatsapp.js';
 import { router as telegramRouter } from './channels/telegram.js';
 import { aiHealthCheck } from './ai.js';
+import { dbHealthCheck } from './supabase.js';
 
 const app = express();
 app.use(express.json());
@@ -23,6 +24,7 @@ app.get('/debug', async (_req, res) => {
     whatsapp: { enabled: config.whatsapp.enabled }
   };
   try { out.ai = await aiHealthCheck(); } catch (e) { out.ai.error = String(e); }
+  try { out.database = await dbHealthCheck(); } catch (e) { out.database = { error: String(e) }; }
 
   if (config.telegram.enabled) {
     try {

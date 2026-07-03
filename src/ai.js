@@ -12,6 +12,8 @@ import * as db from './supabase.js';
 const toolDefs = [
   { name: 'search_products', description: 'Search the catalog by name/keyword. Returns name, price, stock, category.',
     parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } },
+  { name: 'list_categories', description: 'List all product categories available in the store.',
+    parameters: { type: 'object', properties: {} } },
   { name: 'check_stock', description: 'Check if a product is in stock and get its price.',
     parameters: { type: 'object', properties: { product_name: { type: 'string' } }, required: ['product_name'] } },
   { name: 'get_order', description: 'Look up one order + its items by numeric order ID.',
@@ -27,6 +29,7 @@ const toolDefs = [
 async function runTool(name, input, ctx) {
   switch (name) {
     case 'search_products': return await db.searchProducts(input.query);
+    case 'list_categories':  return await db.getCategories();
     case 'check_stock':     return await db.checkStock(input.product_name);
     case 'get_order':       return (await db.getOrderById(input.order_id)) ?? { found: false, order_id: input.order_id };
     case 'get_my_orders':
@@ -61,7 +64,8 @@ const systemPrompt = (storeName) => `তুমি "${storeName}"-এর ২৪/�
 - দাম সবসময় ৳ চিহ্ন দিয়ে দেখাবে।
 
 ## পণ্য খোঁজা
-- গ্রাহক কী চায় স্পষ্ট না হলে জিজ্ঞেস করো: "আমাদের কাছে অনেক ক্যাটাগরি আছে। আপনি কোন ক্যাটাগরির প্রোডাক্ট চান?"
+- কোন কোন ক্যাটাগরি আছে জানতে চাইলে list_categories tool দিয়ে আসল তালিকা দেখাও (নিজে বানাবে না)।
+- গ্রাহক কী চায় স্পষ্ট না হলে জিজ্ঞেস করো: "আপনি কোন ক্যাটাগরির প্রোডাক্ট চান?"
 - এরপর search_products দিয়ে মিলিয়ে নাম, দাম ও স্টক দেখাও।
 
 ## অর্ডার নেওয়া — সব তথ্য নেবে

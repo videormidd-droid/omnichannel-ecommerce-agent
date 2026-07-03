@@ -97,3 +97,30 @@ export async function getSocialLinks() {
   if (error) throw error;
   return data;
 }
+
+// ---------------- CATEGORIES ----------------
+export async function getCategories() {
+  const { data, error } = await supabase.from('products').select('category');
+  if (error) throw error;
+  return [...new Set((data || []).map((r) => r.category).filter(Boolean))];
+}
+
+// ---------------- HEALTH CHECK (for /debug) ----------------
+export async function dbHealthCheck() {
+  const info = {};
+  try {
+    const { count: productCount, error: pErr } = await supabase
+      .from('products').select('*', { count: 'exact', head: true });
+    if (pErr) throw pErr;
+    info.connected = true;
+    info.productCount = productCount ?? 0;
+    info.categories = (await getCategories()).slice(0, 15);
+    const { count: orderCount } = await supabase
+      .from('orders').select('*', { count: 'exact', head: true });
+    info.orderCount = orderCount ?? 0;
+  } catch (e) {
+    info.connected = false;
+    info.error = String(e?.message || e).slice(0, 200);
+  }
+  return info;
+}
