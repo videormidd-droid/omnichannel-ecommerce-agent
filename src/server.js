@@ -12,6 +12,41 @@ app.use(express.json());
 // Health check
 app.get('/', (_req, res) => res.send('Omnichannel e-commerce agent is running ✅'));
 
+// Safe diagnostics page — reports health WITHOUT exposing any tokens/secrets.
+// Open /debug in a browser to see exactly what is (or isn't) working.
+app.get('/debug', async (_req, res) => {
+  const out = {
+    server: 'ok',
+    ai: {
+      provider: config.aiProvider,
+      enabled: config.aiEnabled,
+      model: config.aiProvider === 'anthropic' ? config.aiModel : config.geminiModel
+    },
+    telegram: { enabled: config.telegram.enabled, hasSecret: Boolean(config.telegram.webhookSecret) },
+    whatsapp: { enabled: config.whatsapp.enabled }
+  };
+
+  if (config.telegram.enabled) {
+    try {
+      const me = await fetch(`https://api.telegram.org/bot${config.telegram.botToken}/getMe`).then((r) => r.json());
+      out.telegram.tokenValid = Boolean(me.ok);
+      if (me.ok) out.telegram.botUsername = me.result.username;
+      else out.telegram.tokenError = `${me.error_code} ${me.description}`;
+
+      const wh = await fetch(`https://api.telegram.org/bot${config.telegram.botToken}/getWebhookInfo`).then((r) => r.json());
+      if (wh.ok) {
+        out.telegram.webhookUrl = wh.result.url || '(none set)';
+        out.telegram.pendingUpdates = wh.result.pending_update_count;
+        out.telegram.lastError = wh.result.last_error_message || null;
+      }
+    } catch (e) {
+      out.telegram.checkError = String(e);
+    }
+  }
+
+  res.json(out);
+});
+
 // Mount each channel only if its credentials are present
 if (config.whatsapp.enabled) {
   app.use('/webhook/whatsapp', whatsappRouter);
