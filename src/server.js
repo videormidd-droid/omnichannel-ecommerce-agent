@@ -3,7 +3,7 @@
 //   Telegram → POST     /webhook/telegram
 import express from 'express';
 import { config } from './config.js';
-import { router as whatsappRouter } from './channels/whatsapp.js';
+import { router as whatsappRouter, whatsappStatus } from './channels/whatsapp.js';
 import { router as telegramRouter } from './channels/telegram.js';
 import { aiHealthCheck } from './ai.js';
 import { dbHealthCheck } from './supabase.js';
@@ -68,6 +68,13 @@ app.get('/debug', async (_req, res) => {
       out.whatsapp.checkError = String(e).slice(0, 160);
     }
   }
+
+  Object.assign(out.whatsapp, {
+    lastInboundAt: whatsappStatus.lastInboundAt,
+    lastEvent: whatsappStatus.lastEvent,
+    lastReplyOk: whatsappStatus.lastReplyOk,
+    lastSendError: whatsappStatus.lastError
+  });
 
   res.json(out);
 });
