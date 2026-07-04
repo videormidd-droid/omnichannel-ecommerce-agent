@@ -72,6 +72,9 @@ app.get('/debug', async (_req, res) => {
   Object.assign(out.whatsapp, {
     lastInboundAt: whatsappStatus.lastInboundAt,
     lastEvent: whatsappStatus.lastEvent,
+    lastFrom: whatsappStatus.lastFrom,
+    lastText: whatsappStatus.lastText,
+    lastReplyText: whatsappStatus.lastReplyText,
     lastReplyOk: whatsappStatus.lastReplyOk,
     lastSendError: whatsappStatus.lastError
   });

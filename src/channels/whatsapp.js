@@ -26,7 +26,7 @@ function markAsRead(id) {
 // In-memory status so /debug can show whether inbound arrives + replies send.
 export const whatsappStatus = {
   lastInboundAt: null, lastEvent: null, lastFrom: null,
-  lastText: null, lastReplyOk: null, lastError: null
+  lastText: null, lastReplyText: null, lastReplyOk: null, lastError: null
 };
 
 export const router = express.Router();
@@ -75,6 +75,7 @@ router.post('/', async (req, res) => {
       console.error('[whatsapp] AI error:', aiErr);
       reply = 'দুঃখিত, এই মুহূর্তে একটু সমস্যা হচ্ছে। একটু পরে আবার চেষ্টা করুন। 🙏';
     }
+    whatsappStatus.lastReplyText = String(reply).slice(0, 120);
     try {
       await sendMessage(from, reply);
       whatsappStatus.lastReplyOk = true;
