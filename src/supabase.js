@@ -3,14 +3,26 @@
 import { createClient } from '@supabase/supabase-js';
 import { config } from './config.js';
 
-// Only create the client if configured — otherwise stay null so a missing/bad
-// Supabase setting can't crash the app at import time.
-export const supabase = (config.supabaseUrl && config.supabaseServiceRoleKey)
+// Only create the client if SUPABASE_URL is a VALID http(s) URL — otherwise stay
+// null so a missing OR malformed Supabase setting can't crash the app at boot.
+function isValidHttpUrl(u) {
+  if (!u) return false;
+  try {
+    const x = new URL(u);
+    return x.protocol === 'http:' || x.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export const supabaseConfigured = isValidHttpUrl(config.supabaseUrl) && Boolean(config.supabaseServiceRoleKey);
+
+export const supabase = supabaseConfigured
   ? createClient(config.supabaseUrl, config.supabaseServiceRoleKey, { auth: { persistSession: false } })
   : null;
 
 function db() {
-  if (!supabase) throw new Error('Supabase not configured (SUPABASE_URL / SERVICE_ROLE_KEY missing)');
+  if (!supabase) throw new Error('Supabase not configured, or SUPABASE_URL is not a valid https URL');
   return supabase;
 }
 
