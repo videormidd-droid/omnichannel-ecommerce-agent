@@ -13,7 +13,10 @@ function want(name) {
   return isSet(v) ? v : '';
 }
 
-const whatsappEnabled = isSet(process.env.WHATSAPP_ACCESS_TOKEN) && isSet(process.env.WHATSAPP_PHONE_NUMBER_ID);
+// Accept the WhatsApp access token under WHATSAPP_ACCESS_TOKEN OR META_ACCESS_TOKEN
+// (some setups name it META_ACCESS_TOKEN) — use whichever is set.
+const whatsappAccessToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN || '';
+const whatsappEnabled = isSet(whatsappAccessToken) && isSet(process.env.WHATSAPP_PHONE_NUMBER_ID);
 const telegramEnabled = isSet(process.env.TELEGRAM_BOT_TOKEN);
 
 if (!whatsappEnabled && !telegramEnabled) {
@@ -34,7 +37,7 @@ export const config = {
   whatsapp: {
     enabled: whatsappEnabled,
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
-    accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
+    accessToken: whatsappAccessToken,
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN,
     apiVersion: process.env.WHATSAPP_API_VERSION || 'v21.0',
     appSecret: process.env.META_APP_SECRET || ''
