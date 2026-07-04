@@ -3,11 +3,16 @@
 import { createClient } from '@supabase/supabase-js';
 import { config } from './config.js';
 
-export const supabase = createClient(
-  config.supabaseUrl,
-  config.supabaseServiceRoleKey,
-  { auth: { persistSession: false } }
-);
+// Only create the client if configured — otherwise stay null so a missing/bad
+// Supabase setting can't crash the app at import time.
+export const supabase = (config.supabaseUrl && config.supabaseServiceRoleKey)
+  ? createClient(config.supabaseUrl, config.supabaseServiceRoleKey, { auth: { persistSession: false } })
+  : null;
+
+function db() {
+  if (!supabase) throw new Error('Supabase not configured (SUPABASE_URL / SERVICE_ROLE_KEY missing)');
+  return supabase;
+}
 
 // ---------------- PRODUCTS ----------------
 export async function searchProducts(query, limit = 5) {
@@ -109,7 +114,8 @@ export async function getCategories() {
 export async function dbHealthCheck() {
   const info = {};
   try {
-    const { count: productCount, error: pErr } = await supabase
+    const client = db();
+    const { count: productCount, error: pErr } = await client
       .from('products').select('*', { count: 'exact', head: true });
     if (pErr) throw pErr;
     info.connected = true;
