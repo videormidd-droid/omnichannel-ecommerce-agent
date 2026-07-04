@@ -21,7 +21,12 @@ app.get('/debug', async (_req, res) => {
     server: 'ok',
     ai: { provider: config.aiProvider, enabled: config.aiEnabled },
     telegram: { enabled: config.telegram.enabled, hasSecret: Boolean(config.telegram.webhookSecret) },
-    whatsapp: { enabled: config.whatsapp.enabled }
+    whatsapp: {
+      enabled: config.whatsapp.enabled,
+      hasAccessToken: Boolean(config.whatsapp.accessToken && !String(config.whatsapp.accessToken).startsWith('your_')),
+      hasPhoneNumberId: Boolean(config.whatsapp.phoneNumberId && !String(config.whatsapp.phoneNumberId).startsWith('your_')),
+      hasVerifyToken: Boolean(config.whatsapp.verifyToken)
+    }
   };
   try { out.ai = await aiHealthCheck(); } catch (e) { out.ai.error = String(e); }
   try { out.database = await dbHealthCheck(); } catch (e) { out.database = { error: String(e) }; }
