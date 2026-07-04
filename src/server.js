@@ -99,6 +99,39 @@ app.get('/setup-telegram', async (req, res) => {
   }
 });
 
+// One-tap fix: subscribe the app to the WhatsApp Business Account's webhooks.
+// This is the step the Configuration UI often misses, which blocks inbound messages.
+app.get('/setup-whatsapp', async (req, res) => {
+  if (!config.whatsapp.enabled) return res.json({ ok: false, error: 'WhatsApp not enabled' });
+  const token = config.whatsapp.accessToken;
+  const v = config.whatsapp.apiVersion;
+  try {
+    let waba = req.query.waba;
+    if (!waba) {
+      // Discover the WABA id from the token's granular scopes.
+      const dbg = await fetch(`https://graph.facebook.com/${v}/debug_token?input_token=${token}&access_token=${token}`).then((r) => r.json());
+      for (const s of (dbg?.data?.granular_scopes || [])) {
+        if (String(s.scope || '').includes('whatsapp') && Array.isArray(s.target_ids) && s.target_ids.length) {
+          waba = s.target_ids[0];
+          break;
+        }
+      }
+    }
+    if (!waba) return res.json({ ok: false, error: 'Could not find WABA id from token; open /setup-whatsapp?waba=YOUR_WABA_ID' });
+
+    const subscribe = await fetch(`https://graph.facebook.com/${v}/${waba}/subscribed_apps`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` }
+    }).then((r) => r.json());
+    const subscribedApps = await fetch(`https://graph.facebook.com/${v}/${waba}/subscribed_apps`, {
+      headers: { Authorization: `Bearer ${token}` }
+    }).then((r) => r.json());
+
+    res.json({ waba, subscribe, subscribedApps });
+  } catch (e) {
+    res.json({ ok: false, error: String(e) });
+  }
+});
+
 // Mount each channel only if its credentials are present
 if (config.whatsapp.enabled) {
   app.use('/webhook/whatsapp', whatsappRouter);
