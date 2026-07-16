@@ -1,10 +1,10 @@
 // app/(auth)/otp-verify/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function OtpVerifyPage() {
+function OtpVerifyInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const phone = searchParams.get("phone") || "";
@@ -55,5 +55,14 @@ export default function OtpVerifyPage() {
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
     </div>
+  );
+}
+
+// useSearchParams() must be inside a Suspense boundary for Next.js prerender
+export default function OtpVerifyPage() {
+  return (
+    <Suspense fallback={null}>
+      <OtpVerifyInner />
+    </Suspense>
   );
 }

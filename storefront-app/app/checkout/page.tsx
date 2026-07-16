@@ -1,14 +1,14 @@
 // app/checkout/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { divisions, getDistricts, getThanas, resolveZone } from "@/lib/bd-address";
 
 const methods = ["bKash", "Nagad", "Rocket", "Cash on Delivery"];
 
-export default function CheckoutPage() {
+function CheckoutInner() {
   const params = useSearchParams();
   const router = useRouter();
   const supabase = createClient();
@@ -206,5 +206,14 @@ export default function CheckoutPage() {
         </button>
       </div>
     </main>
+  );
+}
+
+// useSearchParams() must be inside a Suspense boundary for Next.js prerender
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={null}>
+      <CheckoutInner />
+    </Suspense>
   );
 }
