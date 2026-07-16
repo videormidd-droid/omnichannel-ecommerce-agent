@@ -1,0 +1,52 @@
+/* app/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #ffffff;
+  --surface: #f5f5f6;
+  --border: #ececec;
+  --text: #14151a;
+  --text-muted: #8a8f98;
+  --accent: #f57224;        /* Daraz orange — price, active tab, buttons */
+  --accent-soft: #fff1e8;
+  --cta: #f57224;           /* Buy Now / primary button */
+  --cta-text: #ffffff;
+  --star: #ffb020;
+  --discount-bg: #fde3d8;
+  --discount-text: #f57224;
+  --radius: 12px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.price {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.price-old {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  font-size: 11px;
+}
+
+.btn-cta {
+  background: var(--cta);
+  color: var(--cta-text);
+  border-radius: 8px;
+}
+
+.discount-badge {
+  background: var(--discount-bg);
+  color: var(--discount-text);
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 1px 6px;
+}
