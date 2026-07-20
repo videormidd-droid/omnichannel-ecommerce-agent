@@ -675,7 +675,7 @@ function CheckoutView({ cart, onBack, onConfirm, currentUser }) {
   };
 
   return (
-    <div className="px-4 pt-4 pb-8">
+    <div className="px-4 pt-4 pb-32">
       <div className="flex items-center gap-2 mb-4">
         <button onClick={onBack}><ArrowLeft size={19} color={C.navy} /></button>
         <h2 className="text-[17px] font-bold" style={{ color: C.navy, fontFamily: "'Hind Siliguri', sans-serif" }}>চেকআউট</h2>
@@ -718,11 +718,11 @@ function CheckoutView({ cart, onBack, onConfirm, currentUser }) {
       <div className="bg-white border rounded-2xl p-4 mb-4" style={{ borderColor: C.line }}>
         <p className="text-[13px] font-semibold mb-3" style={{ color: C.navy }}>ডেলিভারি এরিয়া</p>
         {[{ id: "inside", ...DELIVERY.inside }, { id: "outside", ...DELIVERY.outside }].map((o) => (
-          <label key={o.id} className="flex items-center gap-3 py-1.5 cursor-pointer">
-            <input type="radio" checked={area === o.id} onChange={() => setArea(o.id)} style={{ accentColor: C.brand }} />
-            <MapPin size={14} color={C.navySoft} />
-            <span className="text-[13px]" style={{ color: C.navy }}>{o.label} — ৳{o.fee}</span>
-            <span className="text-[11px] ml-auto" style={{ color: C.navySoft }}>({o.time})</span>
+          <label key={o.id} className="flex items-center gap-2.5 py-1.5 cursor-pointer">
+            <input type="radio" checked={area === o.id} onChange={() => setArea(o.id)} style={{ accentColor: C.brand, width: 15, height: 15 }} />
+            <MapPin size={12} color={C.navySoft} />
+            <span className="text-[12.5px]" style={{ color: C.navy }}>{o.label} — ৳{o.fee}</span>
+            <span className="text-[10.5px] ml-auto" style={{ color: C.navySoft }}>({o.time})</span>
           </label>
         ))}
       </div>
@@ -732,10 +732,10 @@ function CheckoutView({ cart, onBack, onConfirm, currentUser }) {
           const isCod = /cash|cod|delivery/i.test(o.name);
           const Icon = isCod ? Truck : Landmark;
           return (
-            <label key={o.id} className="flex items-center gap-3 py-1.5 cursor-pointer">
-              <input type="radio" checked={payment === o.id} onChange={() => setPayment(o.id)} style={{ accentColor: C.brand }} />
-              <Icon size={14} color={C.navySoft} />
-              <span className="text-[13px]" style={{ color: C.navy }}>{o.name}</span>
+            <label key={o.id} className="flex items-center gap-2.5 py-1.5 cursor-pointer">
+              <input type="radio" checked={payment === o.id} onChange={() => setPayment(o.id)} style={{ accentColor: C.brand, width: 15, height: 15 }} />
+              <Icon size={12} color={C.navySoft} />
+              <span className="text-[12.5px]" style={{ color: C.navy }}>{o.name}</span>
             </label>
           );
         })}
@@ -1028,7 +1028,7 @@ function AppInner() {
           </div>
         )}
 
-        {view !== "product" && <FloatingContact />}
+        {(view === "home" || view === "shop") && <FloatingContact />}
         <BottomNav view={view} setView={setView} cartCount={cartCount} isLoggedIn={!!auth.currentUser} />
       </div>
     </div>
