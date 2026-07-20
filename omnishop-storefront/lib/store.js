@@ -145,9 +145,9 @@ export async function getSiteSettings() {
 export async function getDeliveryZones() {
   const rows = await dbSelect("delivery_zones", "select=*").catch(() => []);
   const active = rows.filter((r) => r.active !== false);
-  const find = (re) => active.find((r) => re.test(r.zone_name || ""));
-  const inside = find(/dhaka(?!.*(out|বাইরে))|inside|ভিতরে|ঢাকার ভিতরে/i) || active[0];
-  const outside = find(/out|বাইরে/i) || active[1] || active[0];
+  const isOutside = (r) => /out|বাইরে|বাহির/i.test(r.zone_name || "");
+  const outside = active.find(isOutside) || active[1] || active[0];
+  const inside = active.find((r) => !isOutside(r)) || active[0];
   return {
     inside: { label: inside?.zone_name || "ঢাকার ভিতরে", fee: Number(inside?.charge ?? 60), time: "১-২ দিন" },
     outside: { label: outside?.zone_name || "ঢাকার বাইরে", fee: Number(outside?.charge ?? 120), time: "৩-৫ দিন" },
