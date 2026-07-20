@@ -47,11 +47,14 @@ export async function POST(req) {
     const total = subtotal - couponDiscount + deliveryFee;
     const paymentLabel = payment === "bank" ? "Bank Transfer" : payment === "cod" ? "Cash on Delivery" : String(payment || "COD");
 
+    const notes = [];
+    if (couponCode) notes.push(`কুপন: ${couponCode} -৳${couponDiscount}`);
+    if (body.senderNo) notes.push(`Sender: ${body.senderNo}`);
     const fullAddress = [form.address, form.thana, form.district, form.city].filter(Boolean).join(", ");
     const orderRows = await dbInsert("orders", [{
       customer_name: form.name,
       phone: form.phone,
-      address: fullAddress + (couponCode ? ` [কুপন: ${couponCode} -৳${couponDiscount}]` : ""),
+      address: fullAddress + (notes.length ? ` [${notes.join(" | ")}]` : ""),
       division: form.city || "",
       district: form.district || "",
       thana: form.thana || "",

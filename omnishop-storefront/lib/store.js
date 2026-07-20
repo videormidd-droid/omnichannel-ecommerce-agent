@@ -34,6 +34,12 @@ const SEEDS = {
     { id: "cp_1", code: "OMNI10", type: "percentage", value: 10, enabled: true },
     { id: "cp_2", code: "FLAT200", type: "fixed", value: 200, enabled: true },
   ],
+  content: {
+    homepageText: "বাংলাদেশের বিশ্বস্ত অনলাইন শপ। ক্যাশ অন ডেলিভারি সুবিধা।",
+    privacy: "আপনার তথ্য সুরক্ষিত রাখা আমাদের অগ্রাধিকার। আপনার নাম, ফোন নম্বর ও ঠিকানা শুধুমাত্র অর্ডার ডেলিভারির কাজে ব্যবহৃত হয় — কখনো কারও সাথে শেয়ার করা হয় না।",
+    returnPolicy: "পণ্য হাতে পাওয়ার ৭ দিনের মধ্যে রিটার্ন করা যাবে শর্তসাপেক্ষে। পণ্যটি অব্যবহৃত ও আসল প্যাকেজিংয়ে থাকতে হবে।",
+    terms: "অর্ডার কনফার্ম হওয়ার পর ডেলিভারির আনুমানিক সময় ঢাকায় ১-২ দিন, ঢাকার বাইরে ৩-৫ দিন। কোনো প্রশ্নে আমাদের হটলাইনে যোগাযোগ করুন।",
+  },
 };
 
 export async function getCollection(name) {
@@ -140,6 +146,23 @@ export async function getSiteSettings() {
     },
     socialLinks: socialRows,
   };
+}
+
+export async function getPaymentMethods() {
+  const rows = await dbSelect("payment_settings", "select=*").catch(() => []);
+  const enabled = rows.filter((r) => r.active !== false);
+  const mapped = enabled.map((r) => ({
+    id: String(r.id),
+    name: r.method || "",
+    account: r.number || "",
+    instructions: r.instruction || "",
+    txnRequired: !/cash|cod|delivery|ক্যাশ/i.test(r.method || ""),
+  }));
+  // Always make sure COD exists as an option
+  if (!mapped.some((m) => !m.txnRequired)) {
+    mapped.push({ id: "cod", name: "Cash on Delivery", account: "", instructions: "পণ্য হাতে পেয়ে মূল্য পরিশোধ করুন", txnRequired: false });
+  }
+  return mapped;
 }
 
 export async function getDeliveryZones() {

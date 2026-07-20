@@ -54,6 +54,7 @@ let HERO_SLIDES = [];
 let STORE_WHATSAPP_NUMBER = "8801700000000";
 let DELIVERY = { inside: { label: "Inside Dhaka", fee: 60, time: "1-2 days" }, outside: { label: "Outside Dhaka", fee: 120, time: "3-5 days" } };
 let COUPONS = [];
+let PAYMENTS = [];
 let SITE = {};
 function buildWhatsappLink(product) {
   const msg = `আসসালামুয়ালাইকুম, আমি এই প্রোডাক্টটি সম্পর্কে জানতে চাই:\n📦 ${product.name}\n💰 মূল্য: ৳${product.discount}\nএটা কি স্টকে আছে?`;
@@ -116,6 +117,8 @@ const BD_THANA_HINTS = {
    No hardcoded users — table starts empty.
 =========================================================== */
 const MOBILE_REGEX = /^01[3-9]\d{8}$/;
+const BN_DIGITS = "০১২৩৪৫৬৭৮৯";
+const cleanMobile = (v) => String(v || "").replace(/[০-৯]/g, (d) => String(BN_DIGITS.indexOf(d))).replace(/\D/g, "").slice(0, 11);
 
 function useAuthStore() {
   const users = [];
@@ -136,6 +139,7 @@ function useAuthStore() {
   };
 
   const registerUser = async ({ name, mobile, password }) => {
+    mobile = cleanMobile(mobile);
     if (!name || name.trim().length < 2) return { ok: false, error: "সঠিক নাম লিখুন" };
     if (!MOBILE_REGEX.test(mobile)) return { ok: false, error: "সঠিক মোবাইল নম্বর দিন (01XXXXXXXXX)" };
     if (!password || password.length < 6) return { ok: false, error: "পাসওয়ার্ড কমপক্ষে ৬ ক্যারেক্টার হতে হবে" };
@@ -151,6 +155,7 @@ function useAuthStore() {
   };
 
   const loginUser = async ({ mobile, password }) => {
+    mobile = cleanMobile(mobile);
     if (!MOBILE_REGEX.test(mobile)) return { ok: false, error: "সঠিক মোবাইল নম্বর দিন" };
     setAuthLoading(true);
     try {
@@ -212,7 +217,7 @@ function ProductCard({ p, onAdd, onOpen }) {
           <Heart size={14} color={C.navySoft} />
         </button>
       </div>
-      <div className="p-3">
+      <div className="p-3 cursor-pointer" onClick={() => onOpen(p)}>
         <p className="text-[13px] font-medium leading-snug mb-1" style={{ color: C.navy, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: "34px" }}>
           {p.name}
         </p>
@@ -403,14 +408,22 @@ function BottomNav({ view, setView, cartCount, isLoggedIn }) {
 
 function FloatingContact() {
   const [open, setOpen] = useState(false);
+  const contact = SITE.contact || {};
+  const waLink = contact.whatsapp || ("https://wa.me/" + STORE_WHATSAPP_NUMBER);
+  const items = [
+    contact.phone ? { icon: Phone, label: "কল করুন", color: "#16A34A", href: "tel:" + contact.phone } : null,
+    { icon: MessageCircle, label: "হোয়াটসঅ্যাপ", color: "#25D366", href: waLink },
+    contact.messenger ? { icon: Send, label: "মেসেঞ্জার", color: "#0084FF", href: contact.messenger } : null,
+    contact.telegram ? { icon: Send, label: "টেলিগ্রাম", color: "#229ED9", href: contact.telegram } : null,
+  ].filter(Boolean);
   return (
     <div className="fixed z-40" style={{ right: 16, bottom: 78, maxWidth: 480 }}>
       {open && (
         <div className="mb-2 bg-white rounded-2xl shadow-lg p-2 flex flex-col gap-1 border" style={{ borderColor: C.line }}>
-          {[{ icon: Phone, label: "কল করুন", color: "#16A34A" }, { icon: MessageCircle, label: "হোয়াটসঅ্যাপ", color: "#25D366" }, { icon: Send, label: "মেসেঞ্জার", color: "#0084FF" }].map((b, idx) => (
-            <button key={idx} className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-[12px] font-medium" style={{ color: C.navy }}>
+          {items.map((b, idx) => (
+            <a key={idx} href={b.href} target={b.href.startsWith("tel:") ? undefined : "_blank"} rel="noreferrer" className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 text-[12px] font-medium" style={{ color: C.navy }}>
               <b.icon size={16} color={b.color} /> {b.label}
-            </button>
+            </a>
           ))}
         </div>
       )}
@@ -616,7 +629,10 @@ function CartView({ cart, updateQty, removeItem, goCheckout, goShop }) {
 function CheckoutView({ cart, onBack, onConfirm, currentUser }) {
   const [form, setForm] = useState({ name: currentUser?.name || "", phone: currentUser?.mobile || "", city: "Dhaka", district: "", thana: "", address: "" });
   const [area, setArea] = useState("inside");
-  const [payment, setPayment] = useState("cod");
+  const payMethods = PAYMENTS.length ? PAYMENTS : [{ id: "cod", name: "Cash on Delivery", account: "", instructions: "", txnRequired: false }];
+  const [payment, setPayment] = useState(payMethods.find((m) => /cash|cod|delivery/i.test(m.name))?.id || payMethods[0].id);
+  const [senderNo, setSenderNo] = useState("");
+  const [trxId, setTrxId] = useState("");
   const [coupon, setCoupon] = useState("");
   const [couponMsg, setCouponMsg] = useState(null);
   const [discountPct, setDiscountPct] = useState(0);
@@ -643,11 +659,14 @@ function CheckoutView({ cart, onBack, onConfirm, currentUser }) {
   const showPhoneError = phoneTouched && form.phone.length > 0 && !phoneValid;
   const valid = form.name && phoneValid && form.address;
 
+  const selPay = payMethods.find((m) => m.id === payment);
+  const payOk = !selPay?.txnRequired || trxId.trim().length >= 4;
+
   const submitOrder = async () => {
-    if (!valid || placing) return;
+    if (!valid || !payOk || placing) return;
     setPlacing(true); setPlaceError(null);
     try {
-      const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cart: cart.map((i) => ({ id: i.id, qty: i.qty })), form, area, payment, coupon }) });
+      const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cart: cart.map((i) => ({ id: i.id, qty: i.qty })), form, area, payment: selPay?.name || payment, trxId, senderNo, coupon }) });
       const d = await res.json();
       if (d.ok) onConfirm(d.data.total);
       else setPlaceError(d.error || "অর্ডার তৈরি ব্যর্থ — আবার চেষ্টা করুন");
@@ -709,13 +728,30 @@ function CheckoutView({ cart, onBack, onConfirm, currentUser }) {
       </div>
       <div className="bg-white border rounded-2xl p-4 mb-4" style={{ borderColor: C.line }}>
         <p className="text-[13px] font-semibold mb-3" style={{ color: C.navy }}>পেমেন্ট মেথড</p>
-        {[{ id: "cod", label: "Cash on Delivery", icon: Truck }, { id: "bank", label: "Bank Transfer", icon: Landmark }].map((o) => (
-          <label key={o.id} className="flex items-center gap-3 py-1.5 cursor-pointer">
-            <input type="radio" checked={payment === o.id} onChange={() => setPayment(o.id)} style={{ accentColor: C.brand }} />
-            <o.icon size={14} color={C.navySoft} />
-            <span className="text-[13px]" style={{ color: C.navy }}>{o.label}</span>
-          </label>
-        ))}
+        {payMethods.map((o) => {
+          const isCod = /cash|cod|delivery/i.test(o.name);
+          const Icon = isCod ? Truck : Landmark;
+          return (
+            <label key={o.id} className="flex items-center gap-3 py-1.5 cursor-pointer">
+              <input type="radio" checked={payment === o.id} onChange={() => setPayment(o.id)} style={{ accentColor: C.brand }} />
+              <Icon size={14} color={C.navySoft} />
+              <span className="text-[13px]" style={{ color: C.navy }}>{o.name}</span>
+            </label>
+          );
+        })}
+        {(() => {
+          const sel = payMethods.find((m) => m.id === payment);
+          if (!sel || !sel.txnRequired) return null;
+          return (
+            <div className="mt-2 flex flex-col gap-2">
+              <p className="text-[11.5px] rounded-xl p-2.5 leading-relaxed" style={{ backgroundColor: C.cream, color: C.navySoft }}>
+                <b style={{ color: C.navy }}>{sel.name}</b> নম্বর: <b style={{ color: C.brand }}>{sel.account || "—"}</b>{sel.instructions ? " — " + sel.instructions : ""}
+              </p>
+              <input placeholder="যে নম্বর থেকে টাকা পাঠালেন" inputMode="numeric" value={senderNo} onChange={(e) => setSenderNo(cleanMobile(e.target.value))} className="border rounded-xl px-3.5 py-2.5 text-[13px] outline-none" style={{ borderColor: C.line, color: C.navy }} />
+              <input placeholder="Transaction ID" value={trxId} onChange={(e) => setTrxId(e.target.value)} className="border rounded-xl px-3.5 py-2.5 text-[13px] outline-none" style={{ borderColor: C.line, color: C.navy }} />
+            </div>
+          );
+        })()}
       </div>
       <div className="bg-white border rounded-2xl p-4 mb-4 flex gap-2" style={{ borderColor: C.line }}>
         <div className="flex-1 flex items-center gap-2 border rounded-xl px-3" style={{ borderColor: C.line }}>
@@ -732,7 +768,7 @@ function CheckoutView({ cart, onBack, onConfirm, currentUser }) {
         <div className="h-px mb-2" style={{ backgroundColor: C.line }} />
         <div className="flex justify-between text-[15px] font-bold" style={{ color: C.navy }}><span>মোট</span><span style={{ color: C.brand }}>{fmt(total)}</span></div>
       </div>
-      <button disabled={!valid || placing} onClick={submitOrder} className="w-full py-3.5 rounded-full font-semibold text-[14px] text-white disabled:opacity-40" style={{ backgroundColor: C.brand }}>
+      <button disabled={!valid || !payOk || placing} onClick={submitOrder} className="w-full py-3.5 rounded-full font-semibold text-[14px] text-white disabled:opacity-40" style={{ backgroundColor: C.brand }}>
         {placing ? "অর্ডার হচ্ছে..." : <>অর্ডার কনফার্ম করুন ({fmt(total)})</>}
       </button>
       {placeError && <p className="text-[12px] text-center mt-2" style={{ color: C.danger }}>{placeError}</p>}
@@ -786,11 +822,6 @@ function AuthForms({ registerUser, loginUser, googleLogin, authLoading, onAuthSu
     else onAuthSuccess();
   };
 
-  const tryGoogle = async () => {
-    const res = await googleLogin();
-    setMsg({ ok: res.ok, text: res.error || "সফল হয়েছে" });
-  };
-
   return (
     <div className="px-4 pt-6 pb-10">
       <div className="bg-white border rounded-2xl p-5" style={{ borderColor: C.line }}>
@@ -815,7 +846,7 @@ function AuthForms({ registerUser, loginUser, googleLogin, authLoading, onAuthSu
 
         {tab === "login" ? (
           <div className="flex flex-col gap-2.5">
-            <input placeholder="মোবাইল (01XXXXXXXXX)" value={login.mobile} onChange={(e) => setLogin({ ...login, mobile: e.target.value })} className="border rounded-xl px-3.5 py-2.5 text-[13px] outline-none" style={{ borderColor: C.line, color: C.navy }} />
+            <input placeholder="মোবাইল (01XXXXXXXXX)" inputMode="numeric" value={login.mobile} onChange={(e) => setLogin({ ...login, mobile: cleanMobile(e.target.value) })} className="border rounded-xl px-3.5 py-2.5 text-[13px] outline-none" style={{ borderColor: C.line, color: C.navy }} />
             <div className="relative">
               <input type={showPw ? "text" : "password"} placeholder="পাসওয়ার্ড" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} className="w-full border rounded-xl px-3.5 py-2.5 pr-10 text-[13px] outline-none" style={{ borderColor: C.line, color: C.navy }} />
               <button className="absolute right-3 top-1/2 -translate-y-1/2" onClick={() => setShowPw((v) => !v)}>{showPw ? <EyeOff size={15} color={C.navySoft} /> : <Eye size={15} color={C.navySoft} />}</button>
@@ -827,7 +858,7 @@ function AuthForms({ registerUser, loginUser, googleLogin, authLoading, onAuthSu
         ) : (
           <div className="flex flex-col gap-2.5">
             <input placeholder="পূর্ণ নাম" value={reg.name} onChange={(e) => setReg({ ...reg, name: e.target.value })} className="border rounded-xl px-3.5 py-2.5 text-[13px] outline-none" style={{ borderColor: C.line, color: C.navy }} />
-            <input placeholder="মোবাইল (01XXXXXXXXX)" value={reg.mobile} onChange={(e) => setReg({ ...reg, mobile: e.target.value })} className="border rounded-xl px-3.5 py-2.5 text-[13px] outline-none" style={{ borderColor: C.line, color: C.navy }} />
+            <input placeholder="মোবাইল (01XXXXXXXXX)" inputMode="numeric" value={reg.mobile} onChange={(e) => setReg({ ...reg, mobile: cleanMobile(e.target.value) })} className="border rounded-xl px-3.5 py-2.5 text-[13px] outline-none" style={{ borderColor: C.line, color: C.navy }} />
             <input type="password" placeholder="পাসওয়ার্ড (কমপক্ষে ৬ ক্যারেক্টার)" value={reg.password} onChange={(e) => setReg({ ...reg, password: e.target.value })} className="border rounded-xl px-3.5 py-2.5 text-[13px] outline-none" style={{ borderColor: C.line, color: C.navy }} />
             <input type="password" placeholder="পাসওয়ার্ড কনফার্ম করুন" value={reg.confirm} onChange={(e) => setReg({ ...reg, confirm: e.target.value })} className="border rounded-xl px-3.5 py-2.5 text-[13px] outline-none" style={{ borderColor: C.line, color: C.navy }} />
             <button onClick={submitRegister} disabled={authLoading || !reg.name || !reg.mobile || !reg.password || !reg.confirm} className="w-full py-3 rounded-full font-semibold text-[13px] text-white disabled:opacity-50 flex items-center justify-center gap-2" style={{ backgroundColor: C.brand }}>
@@ -836,16 +867,6 @@ function AuthForms({ registerUser, loginUser, googleLogin, authLoading, onAuthSu
           </div>
         )}
 
-        <div className="flex items-center gap-2 my-4">
-          <div className="flex-1 h-px" style={{ backgroundColor: C.line }} />
-          <span className="text-[11px]" style={{ color: C.navySoft }}>অথবা</span>
-          <div className="flex-1 h-px" style={{ backgroundColor: C.line }} />
-        </div>
-        <GoogleButton onClick={tryGoogle} />
-
-        <p className="text-[11px] mt-4 text-center leading-relaxed" style={{ color: C.navySoft }}>
-          এই সিস্টেমটি বর্তমানে ফ্রন্টএন্ড মকে চলছে। ভবিষ্যতে Supabase Auth + API যুক্ত হলে রিয়েল অ্যাকাউন্ট, OTP ও Google লগইন সম্পূর্ণভাবে কাজ করবে।
-        </p>
       </div>
     </div>
   );
@@ -853,6 +874,12 @@ function AuthForms({ registerUser, loginUser, googleLogin, authLoading, onAuthSu
 
 function ProfileView({ user, onLogout }) {
   const initials = user.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+  const [orders, setOrders] = useState(null);
+  useEffect(() => {
+    fetch("/api/my-orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mobile: user.mobile }) })
+      .then((r) => r.json()).then((d) => setOrders(d.ok ? d.data : [])).catch(() => setOrders([]));
+  }, [user.mobile]);
+  const stMap = { pending: "পেন্ডিং", confirmed: "কনফার্মড", shipped: "শিপড", delivered: "ডেলিভারড", cancelled: "বাতিল" };
   return (
     <div className="px-4 pt-6 pb-10">
       <div className="bg-white border rounded-2xl p-5" style={{ borderColor: C.line }}>
@@ -870,15 +897,65 @@ function ProfileView({ user, onLogout }) {
 
       <div className="bg-white border rounded-2xl p-5 mt-4" style={{ borderColor: C.line }}>
         <p className="text-[13px] font-semibold mb-3" style={{ color: C.navy }}>অর্ডার হিস্টরি</p>
-        <div className="flex flex-col items-center justify-center py-8 gap-2">
-          <Package size={30} color="#D8D2C8" />
-          <p className="text-[12.5px]" style={{ color: C.navySoft }}>এখনো কোনো অর্ডার নেই</p>
-        </div>
+        {orders === null ? (
+          <div className="flex justify-center py-8"><Loader2 size={22} color={C.brand} className="animate-spin" /></div>
+        ) : orders.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 gap-2">
+            <Package size={30} color="#D8D2C8" />
+            <p className="text-[12.5px]" style={{ color: C.navySoft }}>এখনো কোনো অর্ডার নেই</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {orders.map((o) => (
+              <div key={o.id} className="flex items-center justify-between border rounded-xl px-3 py-2.5" style={{ borderColor: C.line }}>
+                <div>
+                  <p className="text-[12.5px] font-semibold" style={{ color: C.navy }}>অর্ডার #{o.id}</p>
+                  <p className="text-[11px]" style={{ color: C.navySoft }}>{new Date(o.created_at).toLocaleDateString("bn-BD")} • {o.payment_method}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[13px] font-bold" style={{ color: C.brand }}>{fmt(o.total)}</p>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: C.cream, color: C.navySoft }}>{stMap[o.order_status] || o.order_status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <button onClick={onLogout} className="w-full mt-4 py-3 rounded-full font-semibold text-[13px] flex items-center justify-center gap-2" style={{ backgroundColor: "#FDECE6", color: C.brand }}>
         <LogOut size={15} /> লগআউট
       </button>
+    </div>
+  );
+}
+
+function SiteFooter() {
+  const [policy, setPolicy] = useState(null);
+  const content = SITE.content || {};
+  const items = [
+    { key: "privacy", label: "প্রাইভেসি পলিসি", text: content.privacy },
+    { key: "returnPolicy", label: "রিটার্ন পলিসি", text: content.returnPolicy },
+    { key: "terms", label: "শর্তাবলী", text: content.terms },
+  ];
+  return (
+    <div className="px-4 pb-8 pt-1 text-center">
+      <div className="flex items-center justify-center gap-4">
+        {items.map((it) => (
+          <button key={it.key} onClick={() => setPolicy(it)} className="text-[11px] underline" style={{ color: C.navySoft }}>{it.label}</button>
+        ))}
+      </div>
+      <p className="text-[10.5px] mt-2" style={{ color: "#B5AFA6" }}>© {new Date().getFullYear()} {SITE.siteName || "OmniShop BD"}</p>
+      {policy && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ backgroundColor: "rgba(15,27,51,0.5)" }} onClick={() => setPolicy(null)}>
+          <div className="bg-white rounded-t-3xl w-full p-5 pb-8 text-left" style={{ maxWidth: 480, maxHeight: "70vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[15px] font-bold" style={{ color: C.navy, fontFamily: "'Hind Siliguri', sans-serif" }}>{policy.label}</p>
+              <button onClick={() => setPolicy(null)}><X size={18} color={C.navySoft} /></button>
+            </div>
+            <p className="text-[13px] leading-relaxed whitespace-pre-line" style={{ color: C.navySoft }}>{policy.text || "শীঘ্রই যুক্ত হবে।"}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -932,7 +1009,7 @@ function AppInner() {
       <div className="w-full relative" style={{ maxWidth: 480, backgroundColor: "#F7F4EF" }}>
         {view !== "product" && <Header query={query} setQuery={setQuery} cartCount={cartCount} scrolled={scrolled} onSearchFocus={goShop} onCartClick={() => setView("cart")} />}
         <div onScroll={onScroll} style={{ minHeight: "70vh" }}>
-          {view === "home" && <HomeView addToCart={addToCart} openProduct={openProduct} goShop={goShop} goCategory={goCategory} />}
+          {view === "home" && <><HomeView addToCart={addToCart} openProduct={openProduct} goShop={goShop} goCategory={goCategory} /><SiteFooter /></>}
           {view === "shop" && <ShopView query={query} setQuery={setQuery} activeCat={activeCat} setActiveCat={setActiveCat} addToCart={addToCart} openProduct={openProduct} />}
           {view === "product" && <ProductDetail product={product} onBack={() => setView("shop")} addToCart={(p, q) => { addToCart(p, q); setView("cart"); }} />}
           {view === "cart" && <CartView cart={cart} updateQty={updateQty} removeItem={removeItem} goCheckout={() => setView("checkout")} goShop={goShop} />}
@@ -985,7 +1062,8 @@ export default function App() {
         HERO_SLIDES = d.heroSlides || [];
         if (d.delivery) DELIVERY = d.delivery;
         COUPONS = d.coupons || [];
-        SITE = d.settings || {};
+        PAYMENTS = d.paymentMethods || [];
+        SITE = { ...(d.settings || {}), content: d.content || {} };
         if (d.whatsappNumber) STORE_WHATSAPP_NUMBER = d.whatsappNumber;
         setReady(true);
       })

@@ -210,6 +210,14 @@ export async function saveCollection(collection, value) {
 
   // 2) products — reconcile against real products table + meta
   if (collection === "products") {
+    // de-dupe incoming list by id (protects against double-submitted state)
+    const seen = new Set();
+    value = (value || []).filter((p) => {
+      const key = String(p.id);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     const dbProducts = await dbSelect("products", "select=id").catch(() => []);
     const dbIds = new Set(dbProducts.map((p) => String(p.id)));
     const keepIds = new Set();

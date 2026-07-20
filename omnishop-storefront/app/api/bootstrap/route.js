@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getCollection, getMergedProducts, getSiteSettings, getDeliveryZones } from "../../../lib/store";
+import { getCollection, getMergedProducts, getSiteSettings, getDeliveryZones, getPaymentMethods } from "../../../lib/store";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const [categories, sections, agentTypes, heroSlides, products, settings, delivery, coupons] = await Promise.all([
+    const [categories, sections, agentTypes, heroSlides, products, settings, delivery, coupons, paymentMethods, content] = await Promise.all([
       getCollection("categories"),
       getCollection("sections"),
       getCollection("agent_types"),
@@ -14,6 +14,8 @@ export async function GET() {
       getSiteSettings(),
       getDeliveryZones(),
       getCollection("coupons"),
+      getPaymentMethods(),
+      getCollection("content"),
     ]);
     // Extract the store WhatsApp number from settings contact (wa.me link or raw number)
     const wa = settings.contact.whatsapp || "";
@@ -28,6 +30,8 @@ export async function GET() {
       settings,
       delivery: { inside: delivery.inside, outside: delivery.outside },
       coupons: (coupons || []).filter((c) => c.enabled !== false).map(({ code, type, value }) => ({ code, type, value, enabled: true })),
+      paymentMethods,
+      content,
       whatsappNumber: waNumber,
     });
   } catch (e) {

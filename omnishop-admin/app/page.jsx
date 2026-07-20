@@ -1598,6 +1598,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState(null);
   const [loadingState, setLoadingState] = useState(false);
+  const saveChainRef = useRef(Promise.resolve());
 
   const toast = (text, type = "success") => { setToastMsg({ text, type }); setTimeout(() => setToastMsg(null), 2500); };
 
@@ -1632,7 +1633,9 @@ export default function App() {
       const keys = Object.keys(next);
       const changed = keys.filter((k) => JSON.stringify(next[k]) !== JSON.stringify(prev[k]));
       if (changed.length) {
-        (async () => {
+        // Sequential save queue — prevents double-insert races, and always
+        // re-syncs from the database after collections that generate ids.
+        saveChainRef.current = saveChainRef.current.then(async () => {
           let needReload = false;
           for (const k of changed) {
             try {
@@ -1643,7 +1646,7 @@ export default function App() {
             } catch { toast("সেভ ব্যর্থ — নেটওয়ার্ক", "error"); }
           }
           if (needReload) { try { await reloadState(); } catch {} }
-        })();
+        });
       }
       return next;
     });
