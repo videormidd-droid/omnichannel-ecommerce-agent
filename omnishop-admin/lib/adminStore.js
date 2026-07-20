@@ -158,7 +158,13 @@ export async function getFullState() {
       });
   } catch {}
 
-  const payMethods = pay.map((r) => ({ id: r.id, name: r.method, account: r.number, instructions: r.instruction, enabled: r.active !== false, txnRequired: true }));
+  const seenPm = new Set();
+  const payMethods = pay.filter((r) => {
+    const key = `${r.method}|${r.number}`;
+    if (seenPm.has(key)) return false;
+    seenPm.add(key);
+    return true;
+  }).slice(0, 20).map((r) => ({ id: r.id, name: r.method, account: r.number, instructions: r.instruction, enabled: r.active !== false, txnRequired: !/cash|cod|delivery|ক্যাশ/i.test(r.method || "") }));
   const deliveryZones = deliv.map((r) => ({ id: r.id, name: r.zone_name, charge: Number(r.charge) || 0, eta: "", freeAbove: null }));
 
   const s = settingsRows[0] || {};

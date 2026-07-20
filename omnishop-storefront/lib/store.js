@@ -149,8 +149,15 @@ export async function getSiteSettings() {
 }
 
 export async function getPaymentMethods() {
-  const rows = await dbSelect("payment_settings", "select=*").catch(() => []);
-  const enabled = rows.filter((r) => r.active !== false);
+  const rows = await dbSelect("payment_settings", "select=*&order=id.asc&limit=100").catch(() => []);
+  const seen = new Set();
+  const enabled = rows.filter((r) => {
+    if (r.active === false) return false;
+    const key = `${r.method}|${r.number}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 10);
   const mapped = enabled.map((r) => ({
     id: String(r.id),
     name: r.method || "",
