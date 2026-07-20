@@ -883,9 +883,22 @@ function ProfileView({ user, onLogout }) {
   );
 }
 
+const ADMIN_PANEL_URL = "https://nexcart-admin-production.up.railway.app";
+
 function AccountView({ auth, onAuthSuccess }) {
-  if (auth.currentUser) return <ProfileView user={auth.currentUser} onLogout={auth.logoutUser} />;
-  return <AuthForms registerUser={auth.registerUser} loginUser={auth.loginUser} googleLogin={auth.googleLogin} authLoading={auth.authLoading} onAuthSuccess={onAuthSuccess} />;
+  const inner = auth.currentUser
+    ? <ProfileView user={auth.currentUser} onLogout={auth.logoutUser} />
+    : <AuthForms registerUser={auth.registerUser} loginUser={auth.loginUser} googleLogin={auth.googleLogin} authLoading={auth.authLoading} onAuthSuccess={onAuthSuccess} />;
+  return (
+    <>
+      {inner}
+      <div className="text-center pb-6 -mt-2">
+        <a href={ADMIN_PANEL_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] underline" style={{ color: "#B5AFA6" }}>
+          <ShieldCheck size={11} /> অ্যাডমিন প্যানেল
+        </a>
+      </div>
+    </>
+  );
 }
 
 /* ===========================================================
