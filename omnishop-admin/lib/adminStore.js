@@ -65,7 +65,7 @@ async function setGuide(name, value) {
 }
 
 /* ---------- product meta (guides type=shop_meta, title=product:<id>) ---------- */
-const META_FIELDS = ["discount", "stock", "sold", "category", "subcategory", "tags", "video", "description", "featured", "active", "section", "agentType", "whatsapp", "facebook", "messenger", "telegram", "whatsappNumber", "messengerUsername", "telegramUsername"];
+const META_FIELDS = ["discount", "stock", "sold", "category", "subcategory", "tags", "video", "description", "featured", "active", "section", "agentType", "whatsapp", "facebook", "messenger", "telegram", "whatsappNumber", "messengerUsername", "telegramUsername", "messageTemplate", "minPrice", "maxPrice", "suggestedPrice"];
 
 async function getAllMeta() {
   const rows = await dbSelect("guides", "select=title,content&type=eq.shop_meta&title=like.product:*");
@@ -119,6 +119,7 @@ export async function getFullState() {
       section: m.section || "", agentType: m.agentType || "normal",
       whatsapp: m.whatsapp || "", facebook: m.facebook || "", messenger: m.messenger || "", telegram: m.telegram || "",
       whatsappNumber: m.whatsappNumber || "", messengerUsername: m.messengerUsername || "", telegramUsername: m.telegramUsername || "",
+      messageTemplate: m.messageTemplate || "", minPrice: m.minPrice ?? "", maxPrice: m.maxPrice ?? "", suggestedPrice: m.suggestedPrice ?? "",
     };
   });
 
@@ -235,12 +236,14 @@ export async function saveCollection(collection, value) {
         await setMeta(p.id, p);
         keepIds.add(String(p.id));
         await syncExtraMedia(p.id, p.images, p.video);
+        await syncHiddenPricing(p.id, p);
       } else {
         const inserted = await dbInsert("products", [core]);
         const newId = inserted[0].id;
         await setMeta(newId, p);
         keepIds.add(String(newId));
         await syncExtraMedia(newId, p.images, p.video);
+        await syncHiddenPricing(newId, p);
       }
     }
     for (const id of dbIds) if (!keepIds.has(id)) {
@@ -278,6 +281,20 @@ export async function saveCollection(collection, value) {
   }
   // users / admins — read-only from here
   return { ok: true };
+}
+
+// Smart Control prices → the existing hidden_pricing table (bot/agent-ready)
+async function syncHiddenPricing(pid, p) {
+  const min = Number(p.minPrice), max = Number(p.maxPrice), sug = Number(p.suggestedPrice);
+  await dbDelete("hidden_pricing", `product_id=eq.${pid}`).catch(() => {});
+  if (min > 0 || max > 0 || sug > 0) {
+    await dbInsert("hidden_pricing", [{
+      product_id: pid,
+      min_price: min > 0 ? min : null,
+      max_price: max > 0 ? max : null,
+      agent_price: sug > 0 ? sug : null,
+    }], false).catch(() => {});
+  }
 }
 
 async function syncExtraMedia(pid, images, video) {

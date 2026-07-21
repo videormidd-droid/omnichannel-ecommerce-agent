@@ -663,6 +663,7 @@ function ProductForm({ initial, categories, sections, agentTypes, whatsappPhone,
     images: [], video: "", description: "", featured: false, active: true,
     section: sections[0]?.key || "", agentType: agentTypes[0]?.key || "",
     facebook: "", whatsappNumber: "", whatsapp: "", messengerUsername: "", messenger: "", telegramUsername: "", telegram: "",
+    messageTemplate: "", minPrice: "", maxPrice: "", suggestedPrice: "",
   };
   const [f, setF] = useState(initial || emptyForm);
   const [uploadingVideo, setUploadingVideo] = useState(false);
@@ -764,6 +765,20 @@ function ProductForm({ initial, categories, sections, agentTypes, whatsappPhone,
       </div>
 
       <Field label="বিবরণ"><textarea rows={3} className={inputCls} style={inputStyle} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
+
+      {/* ============ SMART CONTROL ============ */}
+      <div className="sm:col-span-2 rounded-xl border p-3 mt-1 mb-2" style={{ borderColor: C.line, backgroundColor: "#FAF8F5" }}>
+        <p className="text-[12px] font-bold mb-2 flex items-center gap-1.5" style={{ color: C.navy }}>⚡ Smart Control <span className="font-normal text-[10.5px]" style={{ color: C.navySoft }}>(WhatsApp মেসেজ ও এজেন্ট প্রাইস গাইড)</span></p>
+        <Field label="মেসেজ টেমপ্লেট (WhatsApp মেসেজে অটো যুক্ত হবে)">
+          <input className={inputCls} style={inputStyle} placeholder="যেমন: 🔥 আজকে special price" value={f.messageTemplate} onChange={(e) => setF({ ...f, messageTemplate: e.target.value })} />
+        </Field>
+        <div className="grid grid-cols-3 gap-x-2">
+          <Field label="Min Price"><input type="number" className={inputCls} style={inputStyle} value={f.minPrice} onChange={(e) => setF({ ...f, minPrice: e.target.value })} /></Field>
+          <Field label="Max Price"><input type="number" className={inputCls} style={inputStyle} value={f.maxPrice} onChange={(e) => setF({ ...f, maxPrice: e.target.value })} /></Field>
+          <Field label="Suggested"><input type="number" className={inputCls} style={inputStyle} value={f.suggestedPrice} onChange={(e) => setF({ ...f, suggestedPrice: e.target.value })} /></Field>
+        </div>
+        <p className="text-[10.5px]" style={{ color: C.navySoft }}>এই দামগুলো কাস্টমার দেখবে না — শুধু আপনার ও এজেন্টের গাইড (negotiation) হিসেবে সেভ হয়।</p>
+      </div>
       <div className="flex items-center gap-6 mt-2">
         <label className="flex items-center gap-2 text-[12.5px] font-medium" style={{ color: C.navy }}><Toggle checked={f.featured} onChange={(v) => setF({ ...f, featured: v })} /> Featured</label>
         <label className="flex items-center gap-2 text-[12.5px] font-medium" style={{ color: C.navy }}><Toggle checked={f.active} onChange={(v) => setF({ ...f, active: v })} /> Active</label>

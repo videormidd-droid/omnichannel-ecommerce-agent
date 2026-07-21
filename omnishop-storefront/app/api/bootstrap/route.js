@@ -17,9 +17,17 @@ export async function GET() {
       getPaymentMethods(),
       getCollection("content"),
     ]);
-    // Extract the store WhatsApp number from settings contact (wa.me link or raw number)
+    // Extract the store WhatsApp number safely:
+    // 1) wa.me/<digits> link  2) raw digits in the whatsapp field
+    // 3) fallback: digits from the phone/imo field  4) default placeholder
     const wa = settings.contact.whatsapp || "";
-    const waNumber = (wa.match(/(?:wa\.me\/|\+?)(\d{10,15})/) || [])[1] || "8801700000000";
+    const phoneRaw = (settings.contact.phone || settings.contact.imo || "").replace(/\D/g, "");
+    let waNumber =
+      (wa.match(/wa\.me\/(\d{10,15})/) || [])[1] ||
+      ((/^[+\d\s-]{10,18}$/.test(wa.trim()) && wa.replace(/\D/g, "").length >= 10) ? wa.replace(/\D/g, "") : "") ||
+      (phoneRaw.length >= 10 ? phoneRaw : "") ||
+      "8801700000000";
+    if (/^01[3-9]\d{8}$/.test(waNumber)) waNumber = "88" + waNumber;
     return NextResponse.json({
       ok: true,
       categories,

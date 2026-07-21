@@ -5,7 +5,7 @@ import {
   Play, MessageCircle, Phone, ChevronRight, Plus, Minus, X, Check,
   MapPin, Truck, ShieldCheck, Zap, ChevronDown, ArrowLeft, Facebook,
   Instagram, Send, Tag, Landmark, CheckCircle2, Eye, EyeOff, LogOut,
-  Package, AlertCircle, Loader2
+  Package, AlertCircle, Loader2, Clock3
 } from "lucide-react";
 
 /* ===========================================================
@@ -57,8 +57,19 @@ let COUPONS = [];
 let PAYMENTS = [];
 let SITE = {};
 function buildWhatsappLink(product) {
-  const msg = `আসসালামুয়ালাইকুম, আমি এই প্রোডাক্টটি সম্পর্কে জানতে চাই:\n📦 ${product.name}\n💰 মূল্য: ৳${product.discount}\nএটা কি স্টকে আছে?`;
-  return product.whatsapp || `https://wa.me/${STORE_WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
+  const lines = [];
+  if (product.messageTemplate) lines.push(product.messageTemplate);
+  lines.push("আসসালামুয়ালাইকুম, আমি এই প্রোডাক্টটি সম্পর্কে জানতে চাই:");
+  lines.push(`📦 ${product.name}`);
+  lines.push(`💰 মূল্য: ৳${product.discount}`);
+  lines.push(`🆔 Product ID: ${product.id}`);
+  lines.push("এটা কি স্টকে আছে?");
+  const msg = lines.join("\n");
+  if (product.whatsapp) {
+    const joiner = product.whatsapp.includes("?") ? "&" : "?";
+    return product.whatsapp.includes("text=") ? product.whatsapp : `${product.whatsapp}${joiner}text=${encodeURIComponent(msg)}`;
+  }
+  return `https://wa.me/${STORE_WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
 }
 
 const fmt = (n) => "৳" + n.toLocaleString("en-BD");
@@ -322,7 +333,7 @@ function FlashSale({ onAdd, onOpen }) {
     .filter((p) => p.pct >= 15)
     .sort((a, b) => b.pct - a.pct)
     .slice(0, 6);
-  if (items.length === 0) return null;
+  if (items.length < 2) return null;
   return (
     <div className="mt-6">
       <div className="mx-4 rounded-2xl p-4 flex items-center justify-between" style={{ background: `linear-gradient(120deg, ${C.teal}, #0B7C73)` }}>
@@ -435,21 +446,107 @@ function FloatingContact() {
 }
 
 /* ===========================================================
+   QUICK INFO BAR — slim two-row info & action strip below hero
+=========================================================== */
+function TrackOrderModal({ onClose }) {
+  const [mobile, setMobile] = useState("");
+  const [orderId, setOrderId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const stMap = { pending: "পেন্ডিং — যাচাই চলছে", confirmed: "কনফার্মড ✅", shipped: "শিপড 🚚", delivered: "ডেলিভারড 🎉", cancelled: "বাতিল" };
+  const submit = async () => {
+    if (busy || !mobile || !orderId) return;
+    setBusy(true); setResult(null);
+    try {
+      const res = await fetch("/api/track", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mobile, orderId }) });
+      const d = await res.json();
+      setResult(d.ok ? { ok: true, o: d.data } : { ok: false, error: d.error });
+    } catch { setResult({ ok: false, error: "নেটওয়ার্ক সমস্যা — আবার চেষ্টা করুন" }); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ backgroundColor: "rgba(15,27,51,0.5)" }} onClick={onClose}>
+      <div className="bg-white rounded-t-3xl w-full p-5 pb-8" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-[15px] font-bold" style={{ color: C.navy, fontFamily: "'Hind Siliguri', sans-serif" }}>অর্ডার ট্র্যাক করুন</p>
+          <button onClick={onClose}><X size={18} color={C.navySoft} /></button>
+        </div>
+        <div className="flex flex-col gap-2.5">
+          <input placeholder="মোবাইল নম্বর (01XXXXXXXXX)" inputMode="numeric" value={mobile} onChange={(e) => setMobile(cleanMobile(e.target.value))} className="border rounded-xl px-3.5 py-2.5 text-[13px] outline-none" style={{ borderColor: C.line, color: C.navy }} />
+          <input placeholder="অর্ডার আইডি (যেমন: 12)" value={orderId} onChange={(e) => setOrderId(e.target.value.replace(/\D/g, ""))} inputMode="numeric" className="border rounded-xl px-3.5 py-2.5 text-[13px] outline-none" style={{ borderColor: C.line, color: C.navy }} />
+          <button onClick={submit} disabled={busy || !mobile || !orderId} className="w-full py-3 rounded-full font-semibold text-[13px] text-white disabled:opacity-50 flex items-center justify-center gap-2" style={{ backgroundColor: C.brand }}>
+            {busy && <Loader2 size={14} className="animate-spin" />} স্ট্যাটাস দেখুন
+          </button>
+        </div>
+        {result && (
+          result.ok ? (
+            <div className="mt-4 rounded-2xl p-4" style={{ backgroundColor: C.cream }}>
+              <p className="text-[13px] font-bold" style={{ color: C.navy }}>অর্ডার #{result.o.id}</p>
+              <p className="text-[12.5px] mt-1" style={{ color: C.navySoft }}>স্ট্যাটাস: <b style={{ color: C.brand }}>{stMap[result.o.order_status] || result.o.order_status}</b></p>
+              <p className="text-[12px] mt-0.5" style={{ color: C.navySoft }}>মোট: {fmt(result.o.total)} • {result.o.payment_method}</p>
+              <p className="text-[11px] mt-0.5" style={{ color: C.navySoft }}>{new Date(result.o.created_at).toLocaleDateString("bn-BD")}</p>
+            </div>
+          ) : (
+            <p className="mt-3 text-[12px] text-center" style={{ color: C.danger }}>{result.error}</p>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+function QuickInfoBar({ trust, goAccount }) {
+  const [showTrack, setShowTrack] = useState(false);
+  const contact = SITE.contact || {};
+  const waLink = contact.whatsapp || ("https://wa.me/" + STORE_WHATSAPP_NUMBER);
+  const phoneDigits = (contact.phone || contact.imo || "").replace(/\D/g, "");
+  const actions = [
+    { icon: Package, label: "ট্র্যাক অর্ডার", color: C.brand, onClick: () => setShowTrack(true) },
+    { icon: Clock3, label: "অর্ডার হিস্টরি", color: C.brand, onClick: goAccount },
+    ...(phoneDigits ? [{ icon: Phone, label: "কল করুন", color: "#2563EB", href: "tel:" + (contact.phone || contact.imo) }] : []),
+    { icon: MessageCircle, label: "হোয়াটসঅ্যাপ", color: "#25D366", href: waLink },
+  ];
+  return (
+    <div className="px-4 mt-3">
+      <div className="grid grid-cols-3" style={{ padding: "8px 0 10px" }}>
+        {trust.map((t, idx) => (
+          <div key={idx} className="flex flex-col items-center" style={{ gap: 4 }}>
+            <t.icon size={20} color={C.brand} />
+            <span className="text-[11px] text-center leading-tight" style={{ color: "#333", fontFamily: "'Hind Siliguri', sans-serif" }}>{t.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="h-px" style={{ backgroundColor: C.line }} />
+      <div className="flex items-center justify-between" style={{ padding: "9px 2px 8px" }}>
+        {actions.map((a, idx) => {
+          const inner = (
+            <>
+              <a.icon size={18} color={a.color} />
+              <span className="text-[10.5px] leading-tight" style={{ color: "#333", fontFamily: "'Hind Siliguri', sans-serif" }}>{a.label}</span>
+            </>
+          );
+          return a.href ? (
+            <a key={idx} href={a.href} target={a.href.startsWith("tel:") ? undefined : "_blank"} rel="noreferrer" className="flex flex-col items-center flex-1" style={{ gap: 4 }}>{inner}</a>
+          ) : (
+            <button key={idx} onClick={a.onClick} className="flex flex-col items-center flex-1" style={{ gap: 4 }}>{inner}</button>
+          );
+        })}
+      </div>
+      <div className="h-px" style={{ backgroundColor: C.line }} />
+      {showTrack && <TrackOrderModal onClose={() => setShowTrack(false)} />}
+    </div>
+  );
+}
+
+/* ===========================================================
    HOME / SHOP VIEWS
 =========================================================== */
-function HomeView({ addToCart, openProduct, goShop, goCategory }) {
+function HomeView({ addToCart, openProduct, goShop, goCategory, goAccount }) {
   const trust = [{ icon: Truck, label: "ফাস্ট ডেলিভারি" }, { icon: ShieldCheck, label: "১০০% অরিজিনাল" }, { icon: Zap, label: "ক্যাশ অন ডেলিভারি" }];
   return (
     <div className="pb-6">
       <HeroBanner onShop={goShop} onCategory={goCategory} />
-      <div className="grid grid-cols-3 gap-2 px-4 mt-4">
-        {trust.map((t, idx) => (
-          <div key={idx} className="rounded-2xl border-2 flex flex-col items-center justify-center gap-1.5 py-3 px-1" style={{ borderColor: C.brand, backgroundColor: "#FFF3EC" }}>
-            <t.icon size={18} color={C.brand} />
-            <span className="text-[10.5px] text-center font-medium leading-tight" style={{ color: C.navySoft, fontFamily: "'Hind Siliguri', sans-serif" }}>{t.label}</span>
-          </div>
-        ))}
-      </div>
+      <QuickInfoBar trust={trust} goAccount={goAccount} />
       <div className="flex items-center justify-between px-4 mt-6 mb-3">
         <h3 className="font-bold text-[16px]" style={{ color: C.navy, fontFamily: "'Hind Siliguri', sans-serif" }}>ক্যাটাগরি</h3>
         <button onClick={goShop} className="text-[12px] font-semibold flex items-center gap-0.5" style={{ color: C.brand }}>সব দেখুন <ChevronRight size={13} /></button>
@@ -668,7 +765,7 @@ function CheckoutView({ cart, onBack, onConfirm, currentUser }) {
     try {
       const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cart: cart.map((i) => ({ id: i.id, qty: i.qty })), form, area, payment: selPay?.name || payment, trxId, senderNo, coupon }) });
       const d = await res.json();
-      if (d.ok) onConfirm(d.data.total);
+      if (d.ok) onConfirm(d.data.total, d.data.orderId);
       else setPlaceError(d.error || "অর্ডার তৈরি ব্যর্থ — আবার চেষ্টা করুন");
     } catch { setPlaceError("নেটওয়ার্ক সমস্যা — আবার চেষ্টা করুন"); }
     finally { setPlacing(false); }
@@ -777,12 +874,20 @@ function CheckoutView({ cart, onBack, onConfirm, currentUser }) {
   );
 }
 
-function SuccessView({ total, onContinue }) {
+function SuccessView({ total, orderId, onContinue }) {
+  const waMsg = encodeURIComponent(`আসসালামুয়ালাইকুম, আমার অর্ডারটি কনফার্ম করুন।\n🆔 Order ID: ${orderId}\n💰 মোট: ৳${total}`);
+  const waHref = `https://wa.me/${STORE_WHATSAPP_NUMBER}?text=${waMsg}`;
   return (
     <div className="flex flex-col items-center justify-center py-24 px-6 text-center gap-3">
       <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: "#E9F9EF" }}><CheckCircle2 size={34} color="#16A34A" /></div>
       <h2 className="text-[17px] font-bold" style={{ color: C.navy, fontFamily: "'Hind Siliguri', sans-serif" }}>অর্ডার সফল হয়েছে!</h2>
       <p className="text-[13px]" style={{ color: C.navySoft }}>আপনার অর্ডার মূল্য {fmt(total)} — শীঘ্রই আমরা আপনার সাথে যোগাযোগ করব।</p>
+      {orderId && <p className="text-[13px] font-bold" style={{ color: C.brand }}>অর্ডার আইডি: #{orderId}</p>}
+      {orderId && (
+        <a href={waHref} target="_blank" rel="noreferrer" className="mt-1 px-5 py-2.5 rounded-full text-[12.5px] font-semibold text-white flex items-center gap-2" style={{ backgroundColor: "#25D366" }}>
+          <MessageCircle size={15} /> WhatsApp-এ কনফার্ম করুন
+        </a>
+      )}
       <button onClick={onContinue} className="mt-2 px-6 py-2.5 rounded-full text-[13px] font-semibold text-white" style={{ backgroundColor: C.brand }}>শপিং চালিয়ে যান</button>
     </div>
   );
@@ -993,7 +1098,8 @@ function AppInner() {
   const goCategory = (id) => { setActiveCat(id); setView("shop"); };
   const openProduct = (p) => { setProduct(p); setView("product"); };
   // Successful login/register redirects to homepage per spec
-  const confirmOrder = (total) => { setOrderTotal(total); setCart([]); setView("success"); };
+  const [orderIdDone, setOrderIdDone] = useState(null);
+  const confirmOrder = (total, orderId) => { setOrderTotal(total); setOrderIdDone(orderId); setCart([]); setView("success"); };
 
   useEffect(() => {
     if (auth.currentUser && view === "account") {
@@ -1009,12 +1115,12 @@ function AppInner() {
       <div className="w-full relative" style={{ maxWidth: 480, backgroundColor: "#F7F4EF" }}>
         {view !== "product" && <Header query={query} setQuery={setQuery} cartCount={cartCount} scrolled={scrolled} onSearchFocus={goShop} onCartClick={() => setView("cart")} />}
         <div onScroll={onScroll} style={{ minHeight: "70vh" }}>
-          {view === "home" && <><HomeView addToCart={addToCart} openProduct={openProduct} goShop={goShop} goCategory={goCategory} /><SiteFooter /></>}
+          {view === "home" && <><HomeView addToCart={addToCart} openProduct={openProduct} goShop={goShop} goCategory={goCategory} goAccount={() => setView("account")} /><SiteFooter /></>}
           {view === "shop" && <ShopView query={query} setQuery={setQuery} activeCat={activeCat} setActiveCat={setActiveCat} addToCart={addToCart} openProduct={openProduct} />}
           {view === "product" && <ProductDetail product={product} onBack={() => setView("shop")} addToCart={(p, q) => { addToCart(p, q); setView("cart"); }} />}
           {view === "cart" && <CartView cart={cart} updateQty={updateQty} removeItem={removeItem} goCheckout={() => setView("checkout")} goShop={goShop} />}
           {view === "checkout" && <CheckoutView cart={cart} onBack={() => setView("cart")} onConfirm={confirmOrder} currentUser={auth.currentUser} />}
-          {view === "success" && <SuccessView total={orderTotal} onContinue={() => setView("home")} />}
+          {view === "success" && <SuccessView total={orderTotal} orderId={orderIdDone} onContinue={() => setView("home")} />}
           {view === "account" && <AccountView auth={auth} onAuthSuccess={() => setView("home")} />}
         </div>
 

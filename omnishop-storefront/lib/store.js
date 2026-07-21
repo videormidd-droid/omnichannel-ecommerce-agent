@@ -84,6 +84,7 @@ const DEFAULT_META = {
   category: "", subcategory: "", tags: "", discount: null, stock: 100, sold: 0,
   video: "", description: "", featured: false, active: true,
   section: "homepage_top", agentType: "normal", whatsapp: "",
+  messageTemplate: "", suggestedPrice: null,
 };
 
 export async function getMergedProducts({ includeInactive = false } = {}) {
@@ -121,6 +122,7 @@ export async function getMergedProducts({ includeInactive = false } = {}) {
       section: m.section || "homepage_top",
       agentType: m.agentType || "normal",
       whatsapp: m.whatsapp || "",
+      messageTemplate: m.messageTemplate || "",
     };
   });
   return includeInactive ? merged : merged.filter((p) => p.active);
