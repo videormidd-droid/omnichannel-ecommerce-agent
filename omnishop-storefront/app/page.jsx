@@ -7,6 +7,7 @@ import {
   Instagram, Send, Tag, Landmark, CheckCircle2, Eye, EyeOff, LogOut,
   Package, AlertCircle, Loader2, Clock3
 } from "lucide-react";
+import { BD_UPAZILAS } from "../lib/bd-locations";
 
 /* ===========================================================
    DESIGN TOKENS — unchanged from the approved theme
@@ -56,15 +57,33 @@ let DELIVERY = { inside: { label: "Inside Dhaka", fee: 60, time: "1-2 days" }, o
 let COUPONS = [];
 let PAYMENTS = [];
 let SITE = {};
+function renderTemplate(tpl, p) {
+  let out = String(tpl)
+    .split("{name}").join(p.name || "")
+    .split("{price}").join("৳" + (p.price ?? ""))
+    .split("{discount}").join("৳" + (p.discount ?? ""))
+    .split("{stock}").join(String(p.stock ?? ""))
+    .split("{description}").join(p.description || "")
+    .split("{image}").join((p.images && p.images[0]) || "")
+    .split("{id}").join(String(p.id ?? ""));
+  if (!String(tpl).includes("{id}")) out = `ID: ${p.id}\n\n` + out;
+  return out;
+}
+
 function buildWhatsappLink(product) {
-  const lines = [];
-  if (product.messageTemplate) lines.push(product.messageTemplate);
-  lines.push("আসসালামুয়ালাইকুম, আমি এই প্রোডাক্টটি সম্পর্কে জানতে চাই:");
-  lines.push(`📦 ${product.name}`);
-  lines.push(`💰 মূল্য: ৳${product.discount}`);
-  lines.push(`🆔 Product ID: ${product.id}`);
-  lines.push("এটা কি স্টকে আছে?");
-  const msg = lines.join("\n");
+  let msg;
+  if (product.messageTemplate && product.messageTemplate.trim()) {
+    // Dynamic template mode — clean, professional, no auto emojis.
+    msg = renderTemplate(product.messageTemplate, product);
+  } else {
+    const lines = [];
+    lines.push("আসসালামুয়ালাইকুম, আমি এই প্রোডাক্টটি সম্পর্কে জানতে চাই:");
+    lines.push(`📦 ${product.name}`);
+    lines.push(`💰 মূল্য: ৳${product.discount}`);
+    lines.push(`🆔 Product ID: ${product.id}`);
+    lines.push("এটা কি স্টকে আছে?");
+    msg = lines.join("\n");
+  }
   if (product.whatsapp) {
     const joiner = product.whatsapp.includes("?") ? "&" : "?";
     return product.whatsapp.includes("text=") ? product.whatsapp : `${product.whatsapp}${joiner}text=${encodeURIComponent(msg)}`;
@@ -208,6 +227,7 @@ function AgentBadge({ agentType }) {
 
 function ProductCard({ p, onAdd, onOpen }) {
   const [justAdded, setJustAdded] = useState(false);
+  const hasSizes = (p.sizes || []).filter(Boolean).length > 0;
   const pct = Math.round(((p.price - p.discount) / p.price) * 100);
   const outOfStock = p.stock <= 0;
   return (
@@ -246,6 +266,7 @@ function ProductCard({ p, onAdd, onOpen }) {
             onClick={(e) => {
               e.stopPropagation();
               if (outOfStock) return;
+              if (hasSizes) { onOpen(p); return; }
               onAdd(p);
               setJustAdded(true);
               setTimeout(() => setJustAdded(false), 900);
@@ -326,13 +347,18 @@ function useCountdown(hours = 5) {
   return { h, m, s };
 }
 
-function FlashSale({ onAdd, onOpen }) {
-  const { h, m, s } = useCountdown(5);
+function getFlashItems() {
   const items = PRODUCTS.filter((p) => p.active && p.stock > 0)
     .map((p) => ({ ...p, pct: Math.round(((p.price - p.discount) / p.price) * 100) }))
     .filter((p) => p.pct >= 15)
     .sort((a, b) => b.pct - a.pct)
     .slice(0, 6);
+  return items.length < 2 ? [] : items;
+}
+
+function FlashSale({ onAdd, onOpen }) {
+  const { h, m, s } = useCountdown(5);
+  const items = getFlashItems();
   if (items.length < 2) return null;
   return (
     <div className="mt-6">
@@ -563,7 +589,8 @@ function HomeView({ addToCart, openProduct, goShop, goCategory, goAccount }) {
       </div>
       <FlashSale onAdd={addToCart} onOpen={openProduct} />
       {SECTIONS.map((sec) => {
-        const items = PRODUCTS.filter((p) => p.active && p.section === sec.key);
+        const flashIds = new Set(getFlashItems().map((f) => f.id));
+        const items = PRODUCTS.filter((p) => p.active && p.section === sec.key && !flashIds.has(p.id));
         if (items.length === 0) return null;
         return (
           <div key={sec.key}>
@@ -615,7 +642,10 @@ function ShopView({ query, setQuery, activeCat, setActiveCat, addToCart, openPro
 function ProductDetail({ product, onBack, addToCart }) {
   const [qty, setQty] = useState(1);
   const [activeImg, setActiveImg] = useState(0);
+  const [size, setSize] = useState("");
   if (!product) return null;
+  const sizes = (product.sizes || []).filter(Boolean);
+  const needSize = sizes.length > 0 && !size;
   const pct = Math.round(((product.price - product.discount) / product.price) * 100);
   const outOfStock = product.stock <= 0;
   const ytId = product.video && (product.video.match(/(?:v=|youtu\.be\/)([\w-]{6,})/) || [])[1];
@@ -655,6 +685,18 @@ function ProductDetail({ product, onBack, addToCart }) {
             <iframe className="w-full h-full" src={`https://www.youtube.com/embed/${ytId}`} title="Product video" allowFullScreen />
           </div>
         )}
+        {sizes.length > 0 && (
+          <div className="mt-5">
+            <span className="text-[13px] font-medium" style={{ color: C.navy }}>সাইজ বাছাই করুন {!size && <span className="text-[11px]" style={{ color: C.brand }}>*</span>}</span>
+            <div className="flex gap-2 mt-2 flex-wrap">
+              {sizes.map((s) => (
+                <button key={s} onClick={() => setSize(s)} className="min-w-[44px] px-3 py-2 rounded-xl border text-[13px] font-semibold" style={{ borderColor: size === s ? C.brand : C.line, backgroundColor: size === s ? "#FFF3EC" : "#fff", color: size === s ? C.brand : C.navy }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="flex items-center gap-3 mt-5">
           <span className="text-[13px] font-medium" style={{ color: C.navy }}>পরিমাণ</span>
           <div className="flex items-center gap-3 border rounded-full px-3 py-1.5" style={{ borderColor: C.line }}>
@@ -668,8 +710,8 @@ function ProductDetail({ product, onBack, addToCart }) {
         <a href={buildWhatsappLink(product)} target="_blank" rel="noreferrer" className="w-12 h-12 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#25D366" }}>
           <MessageCircle size={20} color="#fff" />
         </a>
-        <button disabled={outOfStock} onClick={() => addToCart(product, qty)} className="flex-1 py-3 rounded-full font-semibold text-[13px] flex items-center justify-center gap-2 disabled:opacity-40" style={{ backgroundColor: C.brand, color: "#fff" }}>
-          <ShoppingCart size={16} /> {outOfStock ? "স্টক শেষ" : "কার্টে যোগ করুন"}
+        <button disabled={outOfStock || needSize} onClick={() => addToCart(product, qty, size)} className="flex-1 py-3 rounded-full font-semibold text-[13px] flex items-center justify-center gap-2 disabled:opacity-40" style={{ backgroundColor: C.brand, color: "#fff" }}>
+          <ShoppingCart size={16} /> {outOfStock ? "স্টক শেষ" : needSize ? "আগে সাইজ বাছাই করুন" : "কার্টে যোগ করুন"}
         </button>
       </div>
     </div>
@@ -695,20 +737,20 @@ function CartView({ cart, updateQty, removeItem, goCheckout, goShop }) {
       <h2 className="text-[17px] font-bold mb-3" style={{ color: C.navy, fontFamily: "'Hind Siliguri', sans-serif" }}>আমার কার্ট ({cart.length})</h2>
       <div className="flex flex-col gap-3">
         {cart.map((item) => (
-          <div key={item.id} className="flex gap-3 bg-white border rounded-2xl p-2.5" style={{ borderColor: C.line }}>
+          <div key={item.cartKey || item.id} className="flex gap-3 bg-white border rounded-2xl p-2.5" style={{ borderColor: C.line }}>
             <img src={item.images[0]} className="w-20 h-20 rounded-xl object-cover" alt={item.name} />
             <div className="flex-1 flex flex-col justify-between py-0.5">
-              <p className="text-[12.5px] font-medium leading-snug" style={{ color: C.navy, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{item.name}</p>
+              <p className="text-[12.5px] font-medium leading-snug" style={{ color: C.navy, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{item.name}{item.size ? <span className="ml-1 text-[10.5px] font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: "#FFF3EC", color: C.brand }}>{item.size}</span> : null}</p>
               <div className="flex items-center justify-between mt-1">
                 <span className="text-[14px] font-bold" style={{ color: C.brand }}>{fmt(item.discount)}</span>
                 <div className="flex items-center gap-2 border rounded-full px-2 py-1" style={{ borderColor: C.line }}>
-                  <button onClick={() => updateQty(item.id, -1)}><Minus size={12} color={C.navySoft} /></button>
+                  <button onClick={() => updateQty(item.cartKey, -1)}><Minus size={12} color={C.navySoft} /></button>
                   <span className="text-[12px] font-semibold w-3 text-center">{item.qty}</span>
-                  <button onClick={() => updateQty(item.id, 1)}><Plus size={12} color={C.navySoft} /></button>
+                  <button onClick={() => updateQty(item.cartKey, 1)}><Plus size={12} color={C.navySoft} /></button>
                 </div>
               </div>
             </div>
-            <button onClick={() => removeItem(item.id)} className="self-start p-1"><X size={15} color="#B5AFA6" /></button>
+            <button onClick={() => removeItem(item.cartKey)} className="self-start p-1"><X size={15} color="#B5AFA6" /></button>
           </div>
         ))}
       </div>
@@ -726,6 +768,7 @@ function CartView({ cart, updateQty, removeItem, goCheckout, goShop }) {
 function CheckoutView({ cart, onBack, onConfirm, currentUser }) {
   const [form, setForm] = useState({ name: currentUser?.name || "", phone: currentUser?.mobile || "", city: "Dhaka", district: "", thana: "", address: "" });
   const [area, setArea] = useState("inside");
+  const [thanaMode, setThanaMode] = useState("select");
   const payMethods = PAYMENTS.length ? PAYMENTS : [{ id: "cod", name: "Cash on Delivery", account: "", instructions: "", txnRequired: false }];
   const [payment, setPayment] = useState(payMethods.find((m) => /cash|cod|delivery/i.test(m.name))?.id || payMethods[0].id);
   const [senderNo, setSenderNo] = useState("");
@@ -763,7 +806,7 @@ function CheckoutView({ cart, onBack, onConfirm, currentUser }) {
     if (!valid || !payOk || placing) return;
     setPlacing(true); setPlaceError(null);
     try {
-      const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cart: cart.map((i) => ({ id: i.id, qty: i.qty })), form, area, payment: selPay?.name || payment, trxId, senderNo, coupon }) });
+      const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cart: cart.map((i) => ({ id: i.id, qty: i.qty, size: i.size || "" })), form, area, payment: selPay?.name || payment, trxId, senderNo, coupon }) });
       const d = await res.json();
       if (d.ok) onConfirm(d.data.total, d.data.orderId);
       else setPlaceError(d.error || "অর্ডার তৈরি ব্যর্থ — আবার চেষ্টা করুন");
@@ -797,18 +840,29 @@ function CheckoutView({ cart, onBack, onConfirm, currentUser }) {
               <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" color={C.navySoft} />
             </div>
             <div className="relative flex-1">
-              <select value={form.district} onChange={(e) => setForm({ ...form, district: e.target.value })} className="w-full appearance-none border rounded-xl px-3.5 py-2.5 text-[13px] outline-none bg-white" style={{ borderColor: C.line, color: C.navy }}>
+              <select value={form.district} onChange={(e) => { setThanaMode("select"); setForm({ ...form, district: e.target.value, thana: "" }); }} className="w-full appearance-none border rounded-xl px-3.5 py-2.5 text-[13px] outline-none bg-white" style={{ borderColor: C.line, color: C.navy }}>
                 <option value="">জেলা বাছাই করুন</option>
                 {(BD_DISTRICTS[form.city] || []).map((d) => <option key={d} value={d}>{d}</option>)}
               </select>
               <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" color={C.navySoft} />
             </div>
           </div>
-          <input placeholder="থানা / উপজেলা লিখুন" value={form.thana} onChange={(e) => setForm({ ...form, thana: e.target.value })} list="thana-suggestions" className="border rounded-xl px-3.5 py-2.5 text-[13px] outline-none" style={{ borderColor: C.line, color: C.navy }} />
-          <datalist id="thana-suggestions">
-            {(BD_THANA_HINTS[form.district] || []).map((t) => <option key={t} value={t} />)}
-          </datalist>
-          {BD_THANA_HINTS[form.district] && <p className="text-[11px] -mt-1.5" style={{ color: C.navySoft }}>টাইপ করলে {form.district}-এর জনপ্রিয় থানার সাজেশন দেখাবে</p>}
+          <div className="relative">
+            <select value={thanaMode === "custom" ? "__other" : form.thana} disabled={!form.district}
+              onChange={(e) => {
+                if (e.target.value === "__other") { setThanaMode("custom"); setForm({ ...form, thana: "" }); }
+                else { setThanaMode("select"); setForm({ ...form, thana: e.target.value }); }
+              }}
+              className="w-full appearance-none border rounded-xl px-3.5 py-2.5 text-[13px] outline-none bg-white disabled:opacity-50" style={{ borderColor: C.line, color: C.navy }}>
+              <option value="">{form.district ? "থানা / উপজেলা বাছাই করুন" : "আগে জেলা বাছাই করুন"}</option>
+              {(BD_UPAZILAS[form.district] || []).map((t) => <option key={t} value={t}>{t}</option>)}
+              <option value="__other">অন্যান্য (নিজে লিখুন)</option>
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" color={C.navySoft} />
+          </div>
+          {thanaMode === "custom" && (
+            <input placeholder="আপনার থানা / উপজেলার নাম লিখুন" value={form.thana} onChange={(e) => setForm({ ...form, thana: e.target.value })} className="border rounded-xl px-3.5 py-2.5 text-[13px] outline-none" style={{ borderColor: C.line, color: C.navy }} />
+          )}
           <textarea placeholder="সম্পূর্ণ ঠিকানা" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} rows={2} className="border rounded-xl px-3.5 py-2.5 text-[13px] outline-none resize-none" style={{ borderColor: C.line, color: C.navy }} />
         </div>
       </div>
@@ -1083,15 +1137,16 @@ function AppInner() {
   const [scrolled, setScrolled] = useState(false);
   const [orderTotal, setOrderTotal] = useState(0);
 
-  const addToCart = (p, qty = 1) => {
+  const addToCart = (p, qty = 1, size = "") => {
     setCart((prev) => {
-      const existing = prev.find((i) => i.id === p.id);
-      if (existing) return prev.map((i) => (i.id === p.id ? { ...i, qty: i.qty + qty } : i));
-      return [...prev, { ...p, qty }];
+      const key = String(p.id) + "|" + (size || "");
+      const existing = prev.find((i) => i.cartKey === key);
+      if (existing) return prev.map((i) => (i.cartKey === key ? { ...i, qty: i.qty + qty } : i));
+      return [...prev, { ...p, qty, size: size || "", cartKey: key }];
     });
   };
-  const updateQty = (id, delta) => setCart((prev) => prev.map((i) => (i.id === id ? { ...i, qty: Math.max(1, i.qty + delta) } : i)).filter((i) => i.qty > 0));
-  const removeItem = (id) => setCart((prev) => prev.filter((i) => i.id !== id));
+  const updateQty = (key, delta) => setCart((prev) => prev.map((i) => (i.cartKey === key ? { ...i, qty: Math.max(1, i.qty + delta) } : i)).filter((i) => i.qty > 0));
+  const removeItem = (key) => setCart((prev) => prev.filter((i) => i.cartKey !== key));
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
 
   const goShop = () => { setActiveCat("all"); setView("shop"); };
@@ -1117,7 +1172,7 @@ function AppInner() {
         <div onScroll={onScroll} style={{ minHeight: "70vh" }}>
           {view === "home" && <><HomeView addToCart={addToCart} openProduct={openProduct} goShop={goShop} goCategory={goCategory} goAccount={() => setView("account")} /><SiteFooter /></>}
           {view === "shop" && <ShopView query={query} setQuery={setQuery} activeCat={activeCat} setActiveCat={setActiveCat} addToCart={addToCart} openProduct={openProduct} />}
-          {view === "product" && <ProductDetail product={product} onBack={() => setView("shop")} addToCart={(p, q) => { addToCart(p, q); setView("cart"); }} />}
+          {view === "product" && <ProductDetail product={product} onBack={() => setView("shop")} addToCart={(p, q, s) => { addToCart(p, q, s); setView("cart"); }} />}
           {view === "cart" && <CartView cart={cart} updateQty={updateQty} removeItem={removeItem} goCheckout={() => setView("checkout")} goShop={goShop} />}
           {view === "checkout" && <CheckoutView cart={cart} onBack={() => setView("cart")} onConfirm={confirmOrder} currentUser={auth.currentUser} />}
           {view === "success" && <SuccessView total={orderTotal} orderId={orderIdDone} onContinue={() => setView("home")} />}

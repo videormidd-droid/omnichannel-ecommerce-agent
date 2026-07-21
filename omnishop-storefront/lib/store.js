@@ -84,7 +84,7 @@ const DEFAULT_META = {
   category: "", subcategory: "", tags: "", discount: null, stock: 100, sold: 0,
   video: "", description: "", featured: false, active: true,
   section: "homepage_top", agentType: "normal", whatsapp: "",
-  messageTemplate: "", suggestedPrice: null,
+  messageTemplate: "", suggestedPrice: null, sizes: "",
 };
 
 export async function getMergedProducts({ includeInactive = false } = {}) {
@@ -123,6 +123,7 @@ export async function getMergedProducts({ includeInactive = false } = {}) {
       agentType: m.agentType || "normal",
       whatsapp: m.whatsapp || "",
       messageTemplate: m.messageTemplate || "",
+      sizes: typeof m.sizes === "string" ? m.sizes.split(",").map(x => x.trim()).filter(Boolean) : (Array.isArray(m.sizes) ? m.sizes : []),
     };
   });
   return includeInactive ? merged : merged.filter((p) => p.active);

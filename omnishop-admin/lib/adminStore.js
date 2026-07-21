@@ -65,7 +65,7 @@ async function setGuide(name, value) {
 }
 
 /* ---------- product meta (guides type=shop_meta, title=product:<id>) ---------- */
-const META_FIELDS = ["discount", "stock", "sold", "category", "subcategory", "tags", "video", "description", "featured", "active", "section", "agentType", "whatsapp", "facebook", "messenger", "telegram", "whatsappNumber", "messengerUsername", "telegramUsername", "messageTemplate", "minPrice", "maxPrice", "suggestedPrice"];
+const META_FIELDS = ["discount", "stock", "sold", "category", "subcategory", "tags", "video", "description", "featured", "active", "section", "agentType", "whatsapp", "facebook", "messenger", "telegram", "whatsappNumber", "messengerUsername", "telegramUsername", "messageTemplate", "minPrice", "maxPrice", "suggestedPrice", "sizes"];
 
 async function getAllMeta() {
   const rows = await dbSelect("guides", "select=title,content&type=eq.shop_meta&title=like.product:*");
@@ -120,10 +120,11 @@ export async function getFullState() {
       whatsapp: m.whatsapp || "", facebook: m.facebook || "", messenger: m.messenger || "", telegram: m.telegram || "",
       whatsappNumber: m.whatsappNumber || "", messengerUsername: m.messengerUsername || "", telegramUsername: m.telegramUsername || "",
       messageTemplate: m.messageTemplate || "", minPrice: m.minPrice ?? "", maxPrice: m.maxPrice ?? "", suggestedPrice: m.suggestedPrice ?? "",
+      sizes: m.sizes || "",
     };
   });
 
-  // orders + items
+  // orders + items (rich snapshot from guides shop_order_meta wins; fallback to order_items)
   const orders = await dbSelect("orders", "select=*&order=created_at.desc&limit=200").catch(() => []);
   let itemsByOrder = {};
   try {
@@ -133,8 +134,20 @@ export async function getFullState() {
       (itemsByOrder[String(it.order_id)] = itemsByOrder[String(it.order_id)] || []).push({ name: prodName[String(it.product_id)] || "পণ্য", qty: it.quantity });
     }
   } catch {}
+  try {
+    const ometas = await dbSelect("guides", "select=title,content&type=eq.shop_order_meta&title=like.order:*");
+    for (const r of ometas) {
+      try {
+        const oid = r.title.slice(6);
+        const parsed = JSON.parse(r.content);
+        if (parsed.items && parsed.items.length) itemsByOrder[oid] = parsed.items;
+      } catch {}
+    }
+  } catch {}
   const mappedOrders = orders.map((o) => ({
     id: o.id, customer: o.customer_name, phone: o.phone, address: o.address,
+    division: o.division || "", district: o.district || "", thana: o.thana || "",
+    deliveryCharge: Number(o.delivery_charge) || 0,
     items: itemsByOrder[String(o.id)] || [],
     total: Number(o.total) || 0, payment: o.payment_method || "", txnId: o.transaction_id || "",
     status: o.order_status || "pending",

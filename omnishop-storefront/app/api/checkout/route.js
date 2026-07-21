@@ -19,12 +19,15 @@ export async function POST(req) {
     const byId = Object.fromEntries(products.map((p) => [String(p.id), p]));
     let subtotal = 0;
     const items = [];
+    const metaItems = [];
     for (const item of cart) {
       const p = byId[String(item.id)];
       if (!p) return NextResponse.json({ ok: false, error: "একটি পণ্য আর পাওয়া যাচ্ছে না — কার্ট রিফ্রেশ করুন" });
       const qty = Math.max(1, Math.min(99, Number(item.qty) || 1));
+      const size = String(item.size || "").slice(0, 20);
       subtotal += p.discount * qty;
       items.push({ product_id: p.id, quantity: qty, price: p.discount });
+      metaItems.push({ name: p.name, qty, price: p.discount, size });
     }
 
     const zones = await getDeliveryZones();
@@ -72,6 +75,16 @@ export async function POST(req) {
       // order exists even if item rows fail; log server-side only
       console.error("order_items insert failed", e);
     }
+
+    // Rich order snapshot (names + sizes) for the admin panel — guides JSON store.
+    try {
+      await dbInsert("guides", [{
+        title: `order:${order.id}`,
+        content: JSON.stringify({ items: metaItems }),
+        type: "shop_order_meta",
+        active: true,
+      }], false);
+    } catch (e) { console.error("order meta insert failed", e); }
 
     return NextResponse.json({ ok: true, data: { orderId: order.id, total, deliveryFee, couponDiscount } });
   } catch (e) {

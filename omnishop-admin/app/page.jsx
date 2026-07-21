@@ -663,10 +663,11 @@ function ProductForm({ initial, categories, sections, agentTypes, whatsappPhone,
     images: [], video: "", description: "", featured: false, active: true,
     section: sections[0]?.key || "", agentType: agentTypes[0]?.key || "",
     facebook: "", whatsappNumber: "", whatsapp: "", messengerUsername: "", messenger: "", telegramUsername: "", telegram: "",
-    messageTemplate: "", minPrice: "", maxPrice: "", suggestedPrice: "",
+    messageTemplate: "", minPrice: "", maxPrice: "", suggestedPrice: "", sizes: "",
   };
   const [f, setF] = useState(initial || emptyForm);
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [saveLock, setSaveLock] = useState(false);
 
   const handleVideoUpload = async (file) => {
     if (!file) return;
@@ -688,7 +689,7 @@ function ProductForm({ initial, categories, sections, agentTypes, whatsappPhone,
   const valid = f.name && f.price && f.category;
   return (
     <Modal title={initial ? "প্রোডাক্ট এডিট করুন" : "নতুন প্রোডাক্ট যোগ করুন"} onClose={handleCancel} wide
-      footer={<><GhostBtn onClick={handleCancel}>বাতিল</GhostBtn><PrimaryBtn icon={Save} disabled={!valid} onClick={() => onSave({ ...f, price: +f.price, discount: +f.discount || +f.price, stock: +f.stock || 0 })}>সেভ করুন</PrimaryBtn></>}>
+      footer={<><GhostBtn onClick={handleCancel}>বাতিল</GhostBtn><PrimaryBtn icon={Save} disabled={!valid || saveLock} onClick={() => { if (saveLock) return; setSaveLock(true); onSave({ ...f, price: +f.price, discount: +f.discount || +f.price, stock: +f.stock || 0 }); }}>{saveLock ? "সেভ হচ্ছে..." : "সেভ করুন"}</PrimaryBtn></>}>
       <div className="grid sm:grid-cols-2 gap-x-3">
         <Field label="প্রোডাক্ট নাম *"><input className={inputCls} style={inputStyle} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
         <Field label="ক্যাটাগরি *">
@@ -765,13 +766,38 @@ function ProductForm({ initial, categories, sections, agentTypes, whatsappPhone,
       </div>
 
       <Field label="বিবরণ"><textarea rows={3} className={inputCls} style={inputStyle} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
+      {categories.find((c) => c.id === f.category)?.hasSize && (
+        <Field label="সাইজ অপশন (কমা দিয়ে লিখুন)">
+          <input className={inputCls} style={inputStyle} placeholder="যেমন: S,M,L,XL অথবা 39,40,41,42" value={f.sizes} onChange={(e) => setF({ ...f, sizes: e.target.value })} />
+        </Field>
+      )}
 
       {/* ============ SMART CONTROL ============ */}
       <div className="sm:col-span-2 rounded-xl border p-3 mt-1 mb-2" style={{ borderColor: C.line, backgroundColor: "#FAF8F5" }}>
         <p className="text-[12px] font-bold mb-2 flex items-center gap-1.5" style={{ color: C.navy }}>⚡ Smart Control <span className="font-normal text-[10.5px]" style={{ color: C.navySoft }}>(WhatsApp মেসেজ ও এজেন্ট প্রাইস গাইড)</span></p>
-        <Field label="মেসেজ টেমপ্লেট (WhatsApp মেসেজে অটো যুক্ত হবে)">
-          <input className={inputCls} style={inputStyle} placeholder="যেমন: 🔥 আজকে special price" value={f.messageTemplate} onChange={(e) => setF({ ...f, messageTemplate: e.target.value })} />
+        <Field label="ডাইনামিক টেমপ্লেট — এটাই WhatsApp মেসেজ হবে (খালি রাখলে সাধারণ মেসেজ যাবে)">
+          <textarea rows={5} className={inputCls} style={inputStyle} placeholder={"Product Name: {name}\nPrice: {price}\nDiscount: {discount}\nStock: {stock}\n\nDescription:\n{description}\n\nImage:\n{image}"} value={f.messageTemplate} onChange={(e) => setF({ ...f, messageTemplate: e.target.value })} />
         </Field>
+        <div className="flex gap-1 flex-wrap mb-2">
+          {["{name}", "{price}", "{discount}", "{stock}", "{description}", "{image}", "{id}"].map((v) => (
+            <button key={v} type="button" onClick={() => setF((p) => ({ ...p, messageTemplate: (p.messageTemplate || "") + v }))} className="text-[10.5px] px-2 py-1 rounded-lg border font-mono" style={{ borderColor: C.line, color: C.navySoft, backgroundColor: "#fff" }}>{v}</button>
+          ))}
+        </div>
+        {f.messageTemplate && f.messageTemplate.trim() && (
+          <div className="rounded-xl border p-2.5 mb-2" style={{ borderColor: C.line, backgroundColor: "#fff" }}>
+            <p className="text-[10.5px] font-semibold mb-1" style={{ color: C.navySoft }}>প্রিভিউ (আসল ডেটা বসিয়ে):</p>
+            <p className="text-[11.5px] whitespace-pre-line" style={{ color: C.navy }}>
+              {(f.messageTemplate.includes("{id}") ? "" : "ID: " + (initial?.id ?? "(অটো)") + "\n\n") + f.messageTemplate
+                .split("{name}").join(f.name || "—")
+                .split("{price}").join("৳" + (f.price || "—"))
+                .split("{discount}").join("৳" + (f.discount || f.price || "—"))
+                .split("{stock}").join(String(f.stock || "—"))
+                .split("{description}").join(f.description || "—")
+                .split("{image}").join(f.images[0] || "—")
+                .split("{id}").join(String(initial?.id ?? "(অটো)"))}
+            </p>
+          </div>
+        )}
         <div className="grid grid-cols-3 gap-x-2">
           <Field label="Min Price"><input type="number" className={inputCls} style={inputStyle} value={f.minPrice} onChange={(e) => setF({ ...f, minPrice: e.target.value })} /></Field>
           <Field label="Max Price"><input type="number" className={inputCls} style={inputStyle} value={f.maxPrice} onChange={(e) => setF({ ...f, maxPrice: e.target.value })} /></Field>
@@ -1134,7 +1160,7 @@ function OrdersManager({ db, setDb, toast }) {
               {filtered.map((o) => (
                 <tr key={o.id} className="border-b" style={{ borderColor: C.line }}>
                   <td className="p-3 font-medium" style={{ color: C.navy }}>{o.id}</td>
-                  <td className="p-3" style={{ color: C.navySoft }}>{o.customer}<br /><span className="text-[11px]">{o.phone}</span></td>
+                  <td className="p-3" style={{ color: C.navySoft }}>{o.customer}<br /><span className="text-[11px]">{o.phone}</span><br /><span className="text-[10.5px]" style={{ color: "#9B9488" }}>{o.createdAt ? new Date(o.createdAt).toLocaleDateString("bn-BD", { day: "numeric", month: "short", year: "numeric" }) : ""}</span></td>
                   <td className="p-3" style={{ color: C.navy }}>{fmt(o.total)}</td>
                   <td className="p-3" style={{ color: C.navySoft }}>{o.payment}</td>
                   <td className="p-3"><StatusBadge status={o.status} /></td>
@@ -1149,8 +1175,16 @@ function OrdersManager({ db, setDb, toast }) {
         <Modal title={openOrder.id} onClose={() => setOpenOrder(null)}>
           <div className="flex flex-col gap-3 text-[13px]">
             <div><span style={{ color: C.navySoft }}>কাস্টমার: </span><b style={{ color: C.navy }}>{openOrder.customer} ({openOrder.phone})</b></div>
-            <div><span style={{ color: C.navySoft }}>প্রোডাক্ট: </span>{openOrder.items.map((it, i) => <span key={i} style={{ color: C.navy }}>{it.name} × {it.qty}{i < openOrder.items.length - 1 ? ", " : ""}</span>)}</div>
-            <div><span style={{ color: C.navySoft }}>মোট মূল্য: </span><b style={{ color: C.brand }}>{fmt(openOrder.total)}</b></div>
+            {openOrder.createdAt && <div><span style={{ color: C.navySoft }}>তারিখ: </span><b style={{ color: C.navy }}>{new Date(openOrder.createdAt).toLocaleString("bn-BD", { day: "numeric", month: "long", year: "numeric", hour: "numeric", minute: "2-digit" })}</b></div>}
+            <div className="rounded-xl p-3" style={{ backgroundColor: "#FAF8F5" }}>
+              <p className="text-[11.5px] font-semibold mb-1" style={{ color: C.navySoft }}>ডেলিভারি ঠিকানা</p>
+              {(openOrder.division || openOrder.district || openOrder.thana) && (
+                <p style={{ color: C.navy }}><b>{[openOrder.thana, openOrder.district, openOrder.division].filter(Boolean).join(", ")}</b></p>
+              )}
+              <p className="text-[12px] mt-0.5" style={{ color: C.navySoft }}>{openOrder.address || "—"}</p>
+            </div>
+            <div><span style={{ color: C.navySoft }}>প্রোডাক্ট: </span>{openOrder.items.map((it, i) => <span key={i} style={{ color: C.navy }}>{it.name}{it.size ? ` (সাইজ: ${it.size})` : ""} × {it.qty}{i < openOrder.items.length - 1 ? ", " : ""}</span>)}</div>
+            <div><span style={{ color: C.navySoft }}>মোট মূল্য: </span><b style={{ color: C.brand }}>{fmt(openOrder.total)}</b>{openOrder.deliveryCharge > 0 && <span className="text-[11.5px]" style={{ color: C.navySoft }}> (ডেলিভারিসহ ৳{openOrder.deliveryCharge})</span>}</div>
             <div><span style={{ color: C.navySoft }}>পেমেন্ট মেথড: </span><b style={{ color: C.navy }}>{openOrder.payment}</b></div>
             {openOrder.txnId && <div><span style={{ color: C.navySoft }}>Transaction ID: </span><b style={{ color: C.navy }}>{openOrder.txnId}</b></div>}
             <Field label="অর্ডার স্ট্যাটাস">
