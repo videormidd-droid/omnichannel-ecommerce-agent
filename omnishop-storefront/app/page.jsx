@@ -393,7 +393,14 @@ function Header({ query, setQuery, cartCount, onSearchFocus, scrolled, onCartCli
     <div className="sticky top-0 z-40 transition-shadow" style={{ backgroundColor: C.brand, boxShadow: scrolled ? "0 4px 14px rgba(15,27,51,0.18)" : "none" }}>
       <div className="px-4 pt-3 pb-3 flex items-center gap-3">
         <span className="text-white font-extrabold text-xl tracking-tight" style={{ fontFamily: "'Poppins', sans-serif" }}>
-          Omni<span style={{ color: C.navy }}>Shop</span> <span className="font-medium text-[13px] align-middle opacity-90">BD</span>
+          {SITE.content?.logoUrl ? (
+            <span className="flex items-center gap-2">
+              <img src={SITE.content.logoUrl} alt={SITE.siteName || "OmniShop BD"} style={{ height: 34, width: 34, objectFit: "contain", borderRadius: 8, backgroundColor: "#fff" }} />
+              <span>{(SITE.siteName || "OmniShop BD").replace(" BD", "")} <span className="font-medium text-[13px] align-middle opacity-90">BD</span></span>
+            </span>
+          ) : (
+            <>Omni<span style={{ color: C.navy }}>Shop</span> <span className="font-medium text-[13px] align-middle opacity-90">BD</span></>
+          )}
         </span>
         <button onClick={onCartClick} className="ml-auto relative active:scale-90 transition-transform" aria-label="কার্ট দেখুন">
           <ShoppingCart color="#fff" size={22} />
@@ -1207,7 +1214,7 @@ export default function App() {
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/bootstrap")
+    fetch("/api/bootstrap", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return;

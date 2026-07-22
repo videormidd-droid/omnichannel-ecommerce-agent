@@ -776,7 +776,13 @@ function ProductForm({ initial, categories, sections, agentTypes, whatsappPhone,
       <div className="sm:col-span-2 rounded-xl border p-3 mt-1 mb-2" style={{ borderColor: C.line, backgroundColor: "#FAF8F5" }}>
         <p className="text-[12px] font-bold mb-2 flex items-center gap-1.5" style={{ color: C.navy }}>⚡ Smart Control <span className="font-normal text-[10.5px]" style={{ color: C.navySoft }}>(WhatsApp মেসেজ ও এজেন্ট প্রাইস গাইড)</span></p>
         <Field label="ডাইনামিক টেমপ্লেট — এটাই WhatsApp মেসেজ হবে (খালি রাখলে সাধারণ মেসেজ যাবে)">
-          <textarea rows={5} className={inputCls} style={inputStyle} placeholder={"Product Name: {name}\nPrice: {price}\nDiscount: {discount}\nStock: {stock}\n\nDescription:\n{description}\n\nImage:\n{image}"} value={f.messageTemplate} onChange={(e) => setF({ ...f, messageTemplate: e.target.value })} />
+          <textarea rows={5} className={inputCls} style={inputStyle} placeholder={"এই বক্সটা এখন খালি — নিজে লিখুন অথবা নিচের সবুজ 'রেডি টেমপ্লেট বসান' বাটন চাপুন"} value={f.messageTemplate} onChange={(e) => setF({ ...f, messageTemplate: e.target.value })} />
+        <div className="flex gap-2 mb-2">
+          <button type="button" onClick={() => setF((p) => ({ ...p, messageTemplate: "Product Name: {name}\nPrice: {price}\nDiscount: {discount}\nStock: {stock}\n\nDescription:\n{description}\n\nImage:\n{image}" }))} className="flex-1 py-2 rounded-xl text-[11.5px] font-semibold text-white" style={{ backgroundColor: "#16A34A" }}>📋 রেডি টেমপ্লেট বসান</button>
+          {f.messageTemplate && f.messageTemplate.trim() && (
+            <a href={"https://wa.me/8801822035312?text=" + encodeURIComponent((f.messageTemplate.includes("{id}") ? "" : "ID: " + (initial?.id ?? "নতুন") + "\n\n") + f.messageTemplate.split("{name}").join(f.name || "").split("{price}").join("৳" + (f.price || "")).split("{discount}").join("৳" + (f.discount || f.price || "")).split("{stock}").join(String(f.stock || "")).split("{description}").join(f.description || "").split("{image}").join(f.images[0] || "").split("{id}").join(String(initial?.id ?? "নতুন")))} target="_blank" rel="noreferrer" className="flex-1 py-2 rounded-xl text-[11.5px] font-semibold text-white text-center" style={{ backgroundColor: "#25D366" }}>WhatsApp-এ টেস্ট</a>
+          )}
+        </div>
         </Field>
         <div className="flex gap-1 flex-wrap mb-2">
           {["{name}", "{price}", "{discount}", "{stock}", "{description}", "{image}", "{id}"].map((v) => (
