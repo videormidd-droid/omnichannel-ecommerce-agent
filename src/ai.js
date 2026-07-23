@@ -147,16 +147,26 @@ const geminiFunctionDeclarations = toolDefs.map((t) =>
 // Try the configured model first, then lite fallbacks. Lite models usually have
 // separate / higher free-tier quota, so a 429 on one model won't kill the reply.
 function geminiCandidates() {
+  // Each model has its OWN free-tier daily pool — more models = more headroom.
+  // 'gemini-flash-latest' removed: rejects tool responses (400 role error).
   return [...new Set([
-    config.geminiModel,
-    'gemini-2.0-flash-lite',
     'gemini-2.5-flash-lite',
-    'gemini-flash-latest'
-  ])];
+    'gemini-2.5-flash',
+    config.geminiModel,
+    'gemini-2.0-flash-lite'
+  ])].filter(Boolean);
 }
 
-function makeGeminiModel(modelName) {
-  const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+// Multiple API keys (comma-separated in GEMINI_API_KEYS) — each key/project has
+// its own free-tier quota, so rotating keys multiplies daily capacity.
+function geminiKeys() {
+  const multi = (process.env.GEMINI_API_KEYS || '').split(',').map((k) => k.trim()).filter(Boolean);
+  const keys = multi.length ? multi : [config.geminiApiKey];
+  return [...new Set(keys)].filter(Boolean);
+}
+
+function makeGeminiModel(modelName, apiKey) {
+  const genAI = new GoogleGenerativeAI(apiKey || config.geminiApiKey);
   return genAI.getGenerativeModel({
     model: modelName,
     systemInstruction: systemPrompt(config.storeName),
@@ -164,8 +174,8 @@ function makeGeminiModel(modelName) {
   });
 }
 
-async function runGeminiChat(modelName, userText, ctx) {
-  const chat = makeGeminiModel(modelName).startChat({ history: getHistory(ctx) });
+async function runGeminiChat(modelName, apiKey, userText, ctx) {
+  const chat = makeGeminiModel(modelName, apiKey).startChat({ history: getHistory(ctx) });
   let result = await chat.sendMessage(userText);
   for (let step = 0; step < 6; step++) {
     const calls = result.response.functionCalls() || [];
@@ -188,12 +198,15 @@ async function runGeminiChat(modelName, userText, ctx) {
 
 async function generateWithGemini(userText, ctx) {
   let lastErr;
-  for (const model of geminiCandidates()) {
-    try {
-      return await runGeminiChat(model, userText, ctx);
-    } catch (err) {
-      lastErr = err;
-      console.error(`[gemini] model "${model}" failed: ${err?.message || err}`);
+  const keys = geminiKeys();
+  for (let ki = 0; ki < keys.length; ki++) {
+    for (const model of geminiCandidates()) {
+      try {
+        return await runGeminiChat(model, keys[ki], userText, ctx);
+      } catch (err) {
+        lastErr = err;
+        console.error(`[gemini] key#${ki + 1} model "${model}" failed: ${String(err?.message || err).slice(0, 160)}`);
+      }
     }
   }
   throw lastErr || new Error('All Gemini models failed');
