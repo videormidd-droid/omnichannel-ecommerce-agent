@@ -12,6 +12,8 @@ import * as db from './supabase.js';
 const toolDefs = [
   { name: 'search_products', description: 'Search the catalog by name/keyword. Returns name, price, stock, category.',
     parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } },
+  { name: 'list_products', description: 'List ALL available products (name, price, stock). Use when the customer asks what products exist.',
+    parameters: { type: 'object', properties: {} } },
   { name: 'list_categories', description: 'List all product categories available in the store.',
     parameters: { type: 'object', properties: {} } },
   { name: 'check_stock', description: 'Check if a product is in stock and get its price.',
@@ -38,7 +40,8 @@ const toolDefs = [
 
 async function runTool(name, input, ctx) {
   switch (name) {
-    case 'search_products': return await db.searchProducts(input.query);
+    case 'search_products': return input.query ? await db.searchProducts(input.query) : await db.getAllProducts();
+    case 'list_products':   return await db.getAllProducts();
     case 'list_categories':  return await db.getCategories();
     case 'check_stock':     return await db.checkStock(input.product_name);
     case 'get_order':       return (await db.getOrderById(input.order_id)) ?? { found: false, order_id: input.order_id };
@@ -64,7 +67,7 @@ const systemPrompt = (storeName) => `তুমি "OmniShop BD"-এর একজ
 
 ## ভাষা ও স্টাইল
 - বাংলা+ইংরেজি স্বাভাবিক মিশ্রণ (গ্রাহকের ভাষা অনুসরণ)। ভাই/আপু সম্বোধন। পরিমিত ইমোজি (😊 🔥 🚚 👍)।
-- প্রথম Hi/Hello-তে: "Assalamu Alaikum 😊 Welcome to OmniShop BD! আপনি কি specific কোনো product খুঁজছেন, নাকি আমি আমাদের best product-গুলো দেখাবো?" — সবসময় পরের ধাপে এগিয়ে নাও।
+- শুধুমাত্র কথোপকথনের একদম শুরুতে গ্রাহক Hi/Hello/সালাম দিলে: "Assalamu Alaikum 😊 Welcome to OmniShop BD! আপনি কি specific কোনো product খুঁজছেন, নাকি আমি আমাদের best product-গুলো দেখাবো?" — এরপর আর কখনো স্বাগত বার্তা repeat করবে না; সরাসরি কাজের কথায় যাবে। গ্রাহক পণ্য চাইলে (যেমন "টি-শার্ট দেখান") greeting বাদ দিয়ে সাথে সাথে tool দিয়ে পণ্য দেখাও।
 
 ## ❌ কখনো ব্যর্থ হবে না (Never-Fail Mode)
 - কখনো বলবে না "বুঝতে পারছি না" বা কথা থামাবে না।
@@ -108,6 +111,31 @@ const systemPrompt = (storeName) => `তুমি "OmniShop BD"-এর একজ
 - শুধু দোকান/পণ্য/অর্ডার; অন্য প্রসঙ্গ ভদ্রভাবে ফিরিয়ে আনো। নিজে অফার বানাবে না।
 - অভিযোগ/জটিলতা/মানুষ চাইলে → handoff_to_human ("আমাদের সিনিয়র একজন আপনার সাথে যোগাযোগ করবেন 😊")।`;
 
+// ================= Conversation memory (per user, in-memory) =================
+// Keeps the last few user/model text turns so the agent remembers context
+// (product being discussed, order details in progress). Resets on redeploy.
+const chatMemory = new Map(); // key -> [{role:'user'|'model', text}]
+const MAX_TURNS = 14;
+function memKey(ctx) { return `${ctx.channel || 'x'}:${ctx.userId || ctx.phone || 'anon'}`; }
+function getHistory(ctx) {
+  const arr = chatMemory.get(memKey(ctx)) || [];
+  // Gemini requires history to start with a 'user' turn
+  const firstUser = arr.findIndex((m) => m.role === 'user');
+  return firstUser === -1 ? [] : arr.slice(firstUser).map((m) => ({ role: m.role, parts: [{ text: m.text }] }));
+}
+function remember(ctx, userText, modelText) {
+  const key = memKey(ctx);
+  const arr = chatMemory.get(key) || [];
+  arr.push({ role: 'user', text: userText });
+  if (modelText) arr.push({ role: 'model', text: modelText });
+  while (arr.length > MAX_TURNS) arr.shift();
+  chatMemory.set(key, arr);
+  if (chatMemory.size > 2000) { // simple safety cap
+    const firstKey = chatMemory.keys().next().value;
+    chatMemory.delete(firstKey);
+  }
+}
+
 // ================= Provider: Google Gemini (default) =================
 // Gemini rejects empty `parameters` — omit it for parameterless tools.
 const geminiFunctionDeclarations = toolDefs.map((t) =>
@@ -137,12 +165,14 @@ function makeGeminiModel(modelName) {
 }
 
 async function runGeminiChat(modelName, userText, ctx) {
-  const chat = makeGeminiModel(modelName).startChat();
+  const chat = makeGeminiModel(modelName).startChat({ history: getHistory(ctx) });
   let result = await chat.sendMessage(userText);
   for (let step = 0; step < 6; step++) {
     const calls = result.response.functionCalls() || [];
     if (calls.length === 0) {
-      return result.response.text().trim() || 'দুঃখিত, একটু আবার বুঝিয়ে বলবেন?';
+      const reply = result.response.text().trim() || 'জি ভাই, একটু বুঝিয়ে বলবেন? 😊';
+      remember(ctx, userText, reply);
+      return reply;
     }
     const parts = [];
     for (const call of calls) {
