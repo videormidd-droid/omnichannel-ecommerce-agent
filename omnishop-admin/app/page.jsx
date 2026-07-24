@@ -7,7 +7,7 @@ import {
   TrendingUp, DollarSign, Clock, Star, Eye, EyeOff, Loader2, Package2,
   ShoppingCart, CheckCircle2, XCircle, ChevronRight, Save, Phone, Send,
   MessageCircle, UserPlus, Boxes, Percent, UploadCloud, Rows, Zap, Film,
-  Rocket, Crown, Link2, GalleryHorizontal, Images, Copy, ExternalLink
+  Rocket, Crown, Link2, GalleryHorizontal, Images, Copy, ExternalLink, Sparkles, MessagesSquare
 } from "lucide-react";
 
 /* ===========================================================
@@ -1538,6 +1538,52 @@ function LocationsManager({ db, setDb, toast }) {
 /* ===========================================================
    SETTINGS
 =========================================================== */
+function GuidelineManager({ db, setDb, toast }) {
+  const [text, setText] = useState(db.agentGuideline || "");
+  const [saved, setSaved] = useState(false);
+  const save = () => { setDb((p) => ({ ...p, agentGuideline: text })); setSaved(true); toast("গাইডলাইন সেভ হয়েছে — বট এখন এটা মেনে চলবে"); setTimeout(() => setSaved(false), 2500); };
+  return (
+    <div>
+      <SectionHeader title="বট গাইডলাইন (লাইভ)" sub="এখানে যা লিখবেন, বট সব চ্যানেলে (Telegram/WhatsApp/Messenger) সেই অনুযায়ী কথা বলবে — কোনো রিডিপ্লয় লাগবে না।" />
+      <Card className="p-4">
+        <div className="rounded-xl p-3 mb-3 text-[12px]" style={{ backgroundColor: C.cream, color: C.navySoft }}>
+          💡 উদাহরণ: "সব সময় প্রথমে সালাম দাও। কোনো পণ্যের দাম জিজ্ঞেস করলে সাথে ডেলিভারি চার্জও বলবে। রেগে থাকা কাস্টমারকে ঠান্ডা ভাষায় সামলাবে।" — আপনার নির্দেশ বটের মূল নিয়মের সাথে যুক্ত হয়ে সর্বোচ্চ অগ্রাধিকার পাবে।
+        </div>
+        <textarea rows={12} className={inputCls} style={inputStyle} placeholder="বটের জন্য আপনার বিশেষ নির্দেশনা/গাইডলাইন এখানে লিখুন..." value={text} onChange={(e) => setText(e.target.value)} />
+        <div className="flex items-center gap-2 mt-3">
+          <PrimaryBtn icon={Save} onClick={save}>গাইডলাইন সেভ করুন</PrimaryBtn>
+          {text && <GhostBtn onClick={() => setText("")}>মুছুন</GhostBtn>}
+          {saved && <span className="text-[12px] font-semibold" style={{ color: "#16A34A" }}>✓ সেভ হয়েছে</span>}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function ChatLogsManager({ db }) {
+  const logs = db.chatLogs || [];
+  return (
+    <div>
+      <SectionHeader title="বট কথোপকথন" sub={`সর্বশেষ ${logs.length} টি কথোপকথন — বট কাস্টমারদের সাথে যেভাবে কথা বলছে`} />
+      {logs.length === 0 ? <Card className="p-6"><EmptyState icon={MessagesSquare} text="এখনো কোনো কথোপকথন নেই (বট মেসেজ পেলে এখানে দেখাবে)" /></Card> : (
+        <div className="flex flex-col gap-3">
+          {logs.map((l, i) => (
+            <Card key={i} className="p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge text={l.channel || "chat"} tone="info" />
+                <span className="text-[11px]" style={{ color: C.navySoft }}>{l.user_id}</span>
+                <span className="text-[10.5px] ml-auto" style={{ color: "#9B9488" }}>{l.ts ? new Date(l.ts).toLocaleString("bn-BD") : ""}</span>
+              </div>
+              <div className="rounded-lg px-3 py-2 mb-1.5 text-[12.5px]" style={{ backgroundColor: "#EFF6FF", color: C.navy }}><b>👤 কাস্টমার:</b> {l.user}</div>
+              <div className="rounded-lg px-3 py-2 text-[12.5px]" style={{ backgroundColor: "#F0FDF4", color: C.navy }}><b>🤖 বট:</b> {l.reply}</div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SettingsManager({ db, setDb, toast }) {
   const [f, setF] = useState(db.settings);
   const save = () => { setDb((p) => ({ ...p, settings: f })); toast("সেটিংস সেভ হয়েছে"); };
@@ -1576,6 +1622,8 @@ const NAV = [
   { id: "contact", label: "কন্টাক্ট ও সাপোর্ট", icon: Headphones },
   { id: "locations", label: "লোকেশন", icon: MapPin },
   { id: "settings", label: "সেটিংস", icon: Settings },
+  { id: "guideline", label: "বট গাইডলাইন", icon: Sparkles },
+  { id: "chatlogs", label: "বট কথোপকথন", icon: MessagesSquare },
 ];
 
 function Sidebar({ active, setActive, open, setOpen, onLogout, siteName }) {
@@ -1735,6 +1783,8 @@ export default function App() {
           {active === "contact" && <ContactManager db={db} setDb={persistingSetDb} toast={toast} />}
           {active === "locations" && <LocationsManager db={db} setDb={persistingSetDb} toast={toast} />}
           {active === "settings" && <SettingsManager db={db} setDb={persistingSetDb} toast={toast} />}
+          {active === "guideline" && <GuidelineManager db={db} setDb={persistingSetDb} toast={toast} />}
+          {active === "chatlogs" && <ChatLogsManager db={db} />}
         </div>
       </div>
       <Toast toast={toastMsg} />

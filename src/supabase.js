@@ -298,6 +298,41 @@ export async function getSocialLinks() {
   return links;
 }
 
+// ---------------- DYNAMIC AGENT GUIDELINE (admin-editable, live) ----------------
+// Admin writes an extra instruction into guides(type='shop_agent_prompt').
+// The bot reads it and appends to its system prompt — behaviour changes with
+// NO redeploy. Returns '' when none set.
+export async function getAgentGuideline() {
+  const { data, error } = await db()
+    .from('guides')
+    .select('content')
+    .eq('type', 'shop_agent_prompt')
+    .eq('title', 'agent_guideline')
+    .limit(1);
+  if (error) throw error;
+  return (data?.[0]?.content || '').trim();
+}
+
+// ---------------- CONVERSATION LOG (so admin can watch how the bot talks) ----------------
+export async function logChat({ channel, userId, phone, userText, replyText }) {
+  try {
+    await db().from('guides').insert({
+      title: 'log:' + Date.now(),
+      type: 'shop_chat_log',
+      active: true,
+      content: JSON.stringify({
+        channel: channel || '',
+        user_id: String(userId || phone || ''),
+        user: String(userText || '').slice(0, 1500),
+        reply: String(replyText || '').slice(0, 3000),
+        ts: new Date().toISOString()
+      })
+    });
+  } catch (e) {
+    console.error('logChat failed:', e?.message || e);
+  }
+}
+
 // ---------------- HEALTH CHECK (for /debug) ----------------
 export async function dbHealthCheck() {
   const info = {};

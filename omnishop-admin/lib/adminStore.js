@@ -184,8 +184,22 @@ export async function getFullState() {
   const s = settingsRows[0] || {};
   const c = contactRows[0] || {};
 
+  // Live agent guideline + recent conversation logs
+  let agentGuideline = "";
+  let chatLogs = [];
+  try {
+    const gl = await dbSelect("guides", "select=content&type=eq.shop_agent_prompt&title=eq.agent_guideline&limit=1");
+    agentGuideline = gl?.[0]?.content || "";
+  } catch {}
+  try {
+    const rows = await dbSelect("guides", "select=title,content&type=eq.shop_chat_log&order=title.desc&limit=100");
+    chatLogs = rows.map((r) => { try { return JSON.parse(r.content); } catch { return null; } }).filter(Boolean);
+  } catch {}
+
   return {
     admins: [],
+    agentGuideline,
+    chatLogs,
     products: mergedProducts,
     categories: cats,
     sections: secs,
@@ -224,7 +238,15 @@ async function replaceAll(table, rows) {
   if (rows.length) await dbInsert(table, rows, false).catch((e) => { throw e; });
 }
 
+async function setAgentGuideline(text) {
+  const rows = await dbSelect("guides", "select=id&type=eq.shop_agent_prompt&title=eq.agent_guideline&limit=1");
+  if (rows.length) await dbUpdate("guides", `id=eq.${rows[0].id}`, { content: text || "" });
+  else await dbInsert("guides", [{ title: "agent_guideline", content: text || "", type: "shop_agent_prompt", active: true }], false);
+}
+
 export async function saveCollection(collection, value) {
+  if (collection === "agentGuideline") { await setAgentGuideline(typeof value === "string" ? value : (value?.text || "")); return { ok: true }; }
+  if (collection === "chatLogs") { return { ok: true }; } // read-only
   // 1) guides-backed JSON collections
   if (GUIDE_MAP[collection]) { await setGuide(GUIDE_MAP[collection], value); return { ok: true }; }
 

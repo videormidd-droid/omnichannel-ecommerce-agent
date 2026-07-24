@@ -8,6 +8,16 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { config } from './config.js';
 import * as db from './supabase.js';
 
+// Admin-editable live guideline (guides type='shop_agent_prompt'), cached ~60s.
+let DYNAMIC_GUIDELINE = '';
+let guidelineAt = 0;
+async function refreshGuideline() {
+  if (Date.now() - guidelineAt < 60000) return;
+  guidelineAt = Date.now();
+  try { DYNAMIC_GUIDELINE = await db.getAgentGuideline(); }
+  catch (e) { console.error('guideline fetch failed:', e?.message || e); }
+}
+
 // ---- Provider-neutral tool definitions (JSON Schema) ----
 const toolDefs = [
   { name: 'search_products', description: 'Search the catalog by name/keyword. Returns name, price, stock, category.',
@@ -109,7 +119,8 @@ const systemPrompt = (storeName) => `তুমি "OmniShop BD"-এর একজ
 
 ## সীমা
 - শুধু দোকান/পণ্য/অর্ডার; অন্য প্রসঙ্গ ভদ্রভাবে ফিরিয়ে আনো। নিজে অফার বানাবে না।
-- অভিযোগ/জটিলতা/মানুষ চাইলে → handoff_to_human ("আমাদের সিনিয়র একজন আপনার সাথে যোগাযোগ করবেন 😊")।`;
+- অভিযোগ/জটিলতা/মানুষ চাইলে → handoff_to_human ("আমাদের সিনিয়র একজন আপনার সাথে যোগাযোগ করবেন 😊")।` +
+  (DYNAMIC_GUIDELINE ? `\n\n## 🔑 অ্যাডমিনের বিশেষ নির্দেশনা (সর্বোচ্চ অগ্রাধিকার — এটাই আগে মানবে)\n${DYNAMIC_GUIDELINE}` : '');
 
 // ================= Conversation memory (per user, in-memory) =================
 // Keeps the last few user/model text turns so the agent remembers context
@@ -297,12 +308,17 @@ async function generateWithAnthropic(userText, ctx) {
 // ================= Dispatch =================
 export async function generateReply(userText, ctx) {
   if (!config.aiEnabled) {
-    const key = config.aiProvider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'GEMINI_API_KEY';
+    const key = config.aiProvider === 'anthropic' ? 'ANTHROPIC_API_KEY'
+      : (config.aiProvider === 'openai' ? 'OPENAI_API_KEY' : 'GEMINI_API_KEY');
     return `🤖 (test mode) আপনি লিখেছেন: "${userText}"\n\nAI চালু করতে .env-এ ${key} যোগ করুন।`;
   }
-  if (config.aiProvider === 'anthropic') return generateWithAnthropic(userText, ctx);
-  if (config.aiProvider === 'openai') return generateWithOpenAI(userText, ctx);
-  return generateWithGemini(userText, ctx);
+  await refreshGuideline();
+  let reply;
+  if (config.aiProvider === 'anthropic') reply = await generateWithAnthropic(userText, ctx);
+  else if (config.aiProvider === 'openai') reply = await generateWithOpenAI(userText, ctx);
+  else reply = await generateWithGemini(userText, ctx);
+  db.logChat({ channel: ctx.channel, userId: ctx.userId, phone: ctx.phone, userText, replyText: reply }).catch(() => {});
+  return reply;
 }
 
 // Live AI health check for /debug — runs a tiny request and reports the exact
