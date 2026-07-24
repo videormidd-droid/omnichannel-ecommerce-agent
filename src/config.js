@@ -27,9 +27,11 @@ if (whatsappEnabled && !isSet(process.env.WHATSAPP_VERIFY_TOKEN)) {
 }
 
 const aiProvider = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
+// Accept the OpenAI key under the correct name OR common mis-names (openai / OPENAI).
+const openaiKey = process.env.OPENAI_API_KEY || process.env.openai || process.env.OPENAI || '';
 const aiEnabled =
   (aiProvider === 'anthropic' && isSet(process.env.ANTHROPIC_API_KEY)) ||
-  (aiProvider === 'openai' && isSet(process.env.OPENAI_API_KEY)) ||
+  (aiProvider === 'openai' && isSet(openaiKey)) ||
   (aiProvider === 'gemini' && isSet(process.env.GEMINI_API_KEY));
 
 export const config = {
@@ -58,7 +60,7 @@ export const config = {
   aiEnabled,
   aiProvider, // 'gemini' (default) | 'anthropic' | 'openai'
   geminiApiKey: process.env.GEMINI_API_KEY || '',
-  openaiApiKey: process.env.OPENAI_API_KEY || '',
+  openaiApiKey: openaiKey,
   openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
   geminiModel: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
