@@ -212,6 +212,57 @@ async function generateWithGemini(userText, ctx) {
   throw lastErr || new Error('All Gemini models failed');
 }
 
+// ================= Provider: OpenAI (paid, gpt-4o-mini default) =================
+// Raw fetch — no extra npm dependency, so nothing new to build/scan on Railway.
+const openaiTools = toolDefs.map((t) => ({
+  type: 'function',
+  function: { name: t.name, description: t.description, parameters: t.parameters || { type: 'object', properties: {} } }
+}));
+
+async function generateWithOpenAI(userText, ctx) {
+  const history = getHistory(ctx).map((h) => ({
+    role: h.role === 'model' ? 'assistant' : 'user',
+    content: h.parts.map((p) => p.text).join('')
+  }));
+  const messages = [
+    { role: 'system', content: systemPrompt(config.storeName) },
+    ...history,
+    { role: 'user', content: userText }
+  ];
+
+  for (let step = 0; step < 6; step++) {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.openaiApiKey}` },
+      body: JSON.stringify({ model: config.openaiModel, messages, tools: openaiTools, tool_choice: 'auto', temperature: 0.6 })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`OpenAI ${res.status}: ${errText.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    const msg = data.choices?.[0]?.message;
+    if (!msg) throw new Error('OpenAI: empty response');
+
+    if (msg.tool_calls && msg.tool_calls.length) {
+      messages.push(msg);
+      for (const call of msg.tool_calls) {
+        let out;
+        try {
+          const args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
+          out = await runTool(call.function.name, args, ctx);
+        } catch (err) { console.error(`Tool ${call.function?.name} failed:`, err); out = { error: 'lookup failed' }; }
+        messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(out) });
+      }
+      continue;
+    }
+    const reply = (msg.content || '').trim() || 'জি ভাই, একটু বুঝিয়ে বলবেন? 😊';
+    remember(ctx, userText, reply);
+    return reply;
+  }
+  return 'আমাদের একজন প্রতিনিধি শীঘ্রই আপনার সাথে যোগাযোগ করবেন। ধন্যবাদ!';
+}
+
 // ================= Provider: Anthropic Claude =================
 const anthropicTools = toolDefs.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters }));
 let anthropic;
@@ -249,9 +300,9 @@ export async function generateReply(userText, ctx) {
     const key = config.aiProvider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'GEMINI_API_KEY';
     return `🤖 (test mode) আপনি লিখেছেন: "${userText}"\n\nAI চালু করতে .env-এ ${key} যোগ করুন।`;
   }
-  return config.aiProvider === 'anthropic'
-    ? generateWithAnthropic(userText, ctx)
-    : generateWithGemini(userText, ctx);
+  if (config.aiProvider === 'anthropic') return generateWithAnthropic(userText, ctx);
+  if (config.aiProvider === 'openai') return generateWithOpenAI(userText, ctx);
+  return generateWithGemini(userText, ctx);
 }
 
 // Live AI health check for /debug — runs a tiny request and reports the exact
@@ -260,7 +311,7 @@ export async function aiHealthCheck() {
   const info = {
     provider: config.aiProvider,
     enabled: config.aiEnabled,
-    model: config.aiProvider === 'anthropic' ? config.aiModel : config.geminiModel
+    model: config.aiProvider === 'anthropic' ? config.aiModel : (config.aiProvider === 'openai' ? config.openaiModel : config.geminiModel)
   };
   if (!config.aiEnabled) return info;
   try {
@@ -279,6 +330,13 @@ export async function aiHealthCheck() {
         }
       }
       if (!ok) info.test = { ok: false, errors };
+    } else if (config.aiProvider === 'openai') {
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.openaiApiKey}` },
+        body: JSON.stringify({ model: config.openaiModel, max_tokens: 5, messages: [{ role: 'user', content: 'hi' }] })
+      });
+      info.test = r.ok ? { ok: true, model: config.openaiModel } : { ok: false, error: (await r.text()).slice(0, 200) };
     } else {
       await getAnthropic().messages.create({
         model: config.aiModel, max_tokens: 20, messages: [{ role: 'user', content: 'say hi' }]

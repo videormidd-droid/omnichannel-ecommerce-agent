@@ -29,6 +29,7 @@ if (whatsappEnabled && !isSet(process.env.WHATSAPP_VERIFY_TOKEN)) {
 const aiProvider = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
 const aiEnabled =
   (aiProvider === 'anthropic' && isSet(process.env.ANTHROPIC_API_KEY)) ||
+  (aiProvider === 'openai' && isSet(process.env.OPENAI_API_KEY)) ||
   (aiProvider === 'gemini' && isSet(process.env.GEMINI_API_KEY));
 
 export const config = {
@@ -55,8 +56,10 @@ export const config = {
 
   // AI brain
   aiEnabled,
-  aiProvider, // 'gemini' (default) | 'anthropic'
+  aiProvider, // 'gemini' (default) | 'anthropic' | 'openai'
   geminiApiKey: process.env.GEMINI_API_KEY || '',
+  openaiApiKey: process.env.OPENAI_API_KEY || '',
+  openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
   geminiModel: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
   aiModel: process.env.AI_MODEL || 'claude-3-5-sonnet-latest',
